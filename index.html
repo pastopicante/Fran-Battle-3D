@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Fran Battle 3D — El juego de Fran</title>
+  <meta name="description" content="Elegí a Motoker, Cazador, The Moon o Silver y corré por la estrella. Jugá solo o con hasta cuatro amigos.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  
+  <!-- Three.js (3D WebGL) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Paho MQTT (WebSockets súper estables para multijugador sin bloqueos de 4G/Wi-Fi) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background: #060914;
+      color: #f1f5f9;
+      font-family: 'Rajdhani', sans-serif;
+      overflow: hidden;
+      position: fixed;
+    }
+
+    /* REGLA GENERAL DE OCULTAMIENTO (CRÍTICA) */
+    .hidden {
+      display: none !important;
+    }
+
+    #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      touch-action: none;
+    }
+
+    /* Pantallas flotantes */
+    .screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      background: radial-gradient(circle at center, rgba(15, 23, 42, 0.96) 0%, rgba(6, 9, 18, 0.99) 100%);
+      padding: 14px 16px;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+    }
+
+    .header-box {
+      width: 100%;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    h1.title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.3rem, 4vw, 2.2rem);
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      background: linear-gradient(135deg, #00f0ff, #ff0077, #ffbe0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      line-height: 1.1;
+    }
+
+    p.subtitle {
+      font-size: clamp(0.75rem, 2vw, 0.95rem);
+      color: #94a3b8;
+      letter-spacing: 0.5px;
+    }
+
+    /* SELECCIÓN DE PERSONAJES: Cuadrícula 2x2 compacta */
+    .char-selection-container {
+      width: 100%;
+      max-width: 650px;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 4px 0;
+    }
+
+    .char-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      width: 100%;
+    }
+
+    @media (min-width: 600px) and (orientation: landscape) {
+      .char-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+    }
+
+    .char-card {
+      background: rgba(15, 23, 42, 0.9);
+      border: 2px solid #334155;
+      border-radius: 12px;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      touch-action: manipulation;
+      transition: all 0.15s ease;
+    }
+
+    .char-card:active {
+      transform: scale(0.96);
+    }
+
+    .char-card.selected {
+      border-color: #00f0ff !important;
+      background: rgba(14, 38, 64, 0.98);
+      box-shadow: 0 0 16px rgba(0, 240, 255, 0.5);
+    }
+
+    .char-card.selected .check-tag {
+      display: block;
+    }
+
+    .check-tag {
+      display: none;
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: #00f0ff;
+      color: #040814;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 900;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+
+    .char-img {
+      width: 100%;
+      max-width: 110px;
+      height: 130px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #0a1120;
+      border: 1px solid rgba(255,255,255,0.1);
+      margin-bottom: 4px;
+    }
+
+    @media (min-width: 600px) {
+      .char-img {
+        height: 200px;
+        max-width: 150px;
+      }
+    }
+
+    .char-name {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 800;
+      line-height: 1.1;
+      text-align: center;
+    }
+
+    .char-role {
+      font-size: 0.7rem;
+      color: #94a3b8;
+      text-align: center;
+      line-height: 1.1;
+      margin-bottom: 2px;
+    }
+
+    .char-ability {
+      background: rgba(0, 240, 255, 0.15);
+      border-radius: 4px;
+      padding: 2px 4px;
+      font-size: 0.65rem;
+      color: #7dd3fc;
+      text-align: center;
+      font-weight: 700;
+      width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* BOTONES */
+    .bottom-bar {
+      width: 100%;
+      max-width: 650px;
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 4px;
+    }
+
+    .btn {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      padding: 12px 18px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      touch-action: manipulation;
+      text-decoration: none;
+    }
+
+    .btn:active {
+      transform: scale(0.96);
+    }
+
+    .btn-main {
+      flex: 2;
+      background: linear-gradient(135deg, #10b981, #059669);
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .btn-secondary {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid #475569;
+    }
+
+    .btn-accent {
+      background: linear-gradient(135deg, #ffbe0b, #fb5607);
+      box-shadow: 0 4px 15px rgba(251, 86, 7, 0.4);
+    }
+
+    /* MODAL CARDS */
+    .modal-card {
+      background: rgba(15, 23, 42, 0.95);
+      border: 2px solid #38bdf8;
+      box-shadow: 0 10px 30px rgba(0, 240, 255, 0.2);
+      border-radius: 14px;
+      padding: 16px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      margin: auto;
+    }
+
+    .input-code {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.3rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-align: center;
+      background: #090d16;
+      border: 2px solid #00f0ff;
+      border-radius: 8px;
+      color: #00f0ff;
+      padding: 8px;
+      width: 100%;
+      margin: 10px 0;
+      text-transform: uppercase;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin: 8px 0;
+    }
+
+    .status-waiting {
+      background: rgba(251, 191, 36, 0.2);
+      border: 1px solid #fbbf24;
+      color: #fbbf24;
+    }
+
+    .status-connected {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+      color: #10b981;
+    }
+
+    .status-error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid #ef4444;
+      color: #ef4444;
+    }
+
+    .player-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      margin-bottom: 4px;
+      font-size: 0.85rem;
+    }
+
+    /* TOP HUD */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 6px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .hud-box {
+      background: rgba(10, 15, 29, 0.9);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 8px;
+      padding: 4px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      pointer-events: auto;
+    }
+
+    .star-radar {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #ffbe0b;
+    }
+
+    #radar-arrow {
+      display: inline-block;
+      font-size: 1.1rem;
+      transform-origin: center;
+    }
+
+    #minimap-canvas {
+      width: 70px;
+      height: 70px;
+      border-radius: 6px;
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      background: rgba(6, 10, 20, 0.9);
+    }
+
+    /* JOYSTICK TÁCTIL EN CELULAR */
+    #touch-controls {
+      position: absolute;
+      bottom: 15px;
+      left: 0;
+      width: 100%;
+      padding: 0 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      z-index: 10;
+      pointer-events: none;
+      touch-action: none;
+    }
+
+    #joystick-zone {
+      width: 115px;
+      height: 115px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px dashed rgba(0, 240, 255, 0.4);
+      position: relative;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    #joystick-knob {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #00f0ff, #0066ff);
+      box-shadow: 0 0 12px rgba(0, 240, 255, 0.6);
+      position: absolute;
+      top: 33px;
+      left: 33px;
+      pointer-events: none;
+    }
+
+    #sprint-btn {
+      width: 65px;
+      height: 65px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #ffbe0b, #fb5607);
+      box-shadow: 0 0 14px rgba(251, 86, 7, 0.5);
+      border: 2px solid #fff;
+      color: #fff;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    #sprint-btn:active {
+      transform: scale(0.92);
+    }
+
+    .audio-widget {
+      position: absolute;
+      bottom: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 12;
+      background: rgba(10, 15, 25, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      padding: 2px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+    }
+
+    .audio-widget button {
+      background: none;
+      border: none;
+      color: #00f0ff;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    #fx-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 25;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="game-canvas"></div>
+  <canvas id="fx-canvas"></canvas>
+
+  <!-- PANTALLA 1: MENÚ INICIAL -->
+  <div id="screen-menu" class="screen">
+    <div class="header-box">
+      <h1 class="title">FRAN BATTLE 3D</h1>
+      <p class="subtitle">CARRERA POR LA GRAN ESTRELLA · VERSIÓN 4 JUGADORES</p>
+    </div>
+
+    <div class="modal-card">
+      <h2 style="font-family:'Orbitron'; font-size:1.15rem; margin-bottom: 8px; color: #38bdf8;">MODO DE JUEGO</h2>
+      <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 14px;">
+        Jugá en solitario contra 3 Bots o conectate online con tus amigos desde cualquier teléfono o compu.
+      </p>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button class="btn btn-main" onclick="startSoloMode()">
+          🎮 JUGAR SOLITARIO (VS 3 BOTS)
+        </button>
+        <button class="btn btn-accent" onclick="showMultiplayerMenu()">
+          🌐 MULTIJUGADOR ONLINE
+        </button>
+      </div>
+    </div>
+
+    <div style="font-size:0.75rem; color:#64748b; text-align:center;">
+      Personajes de Fran: Motoker • Cazador • The Moon • Silver
+    </div>
+  </div>
+
+  <!-- PANTALLA 2: MULTIJUGADOR ONLINE -->
+  <div id="screen-multiplayer" class="screen hidden">
+    <div class="header-box">
+      <h1 class="title">SALA ONLINE</h1>
+      <p class="subtitle">Conexión directa por nombre de sala</p>
+    </div>
+
+    <div class="modal-card">
+      <!-- VISTA 1: INGRESAR O CREAR -->
+      <div id="mp-choice-view">
+        <div style="color:#94a3b8; font-size:0.85rem; margin-bottom:6px;">NOMBRE DE LA SALA:</div>
+        <input type="text" id="room-name-input" class="input-code" placeholder="EJ: FRANCHU" value="FRANCHU" maxlength="15">
+        
+        <p style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 12px;">
+          Poné el mismo nombre en los dos celulares (o compu) y tocá Entrar:
+        </p>
+
+        <button class="btn btn-main" style="width:100%; margin-bottom: 10px;" onclick="joinRoomWithName()">
+          🚀 ENTRAR A LA SALA
+        </button>
+        
+        <button class="btn btn-secondary" style="width:100%; font-size:0.8rem;" onclick="showMainMenu()">
+          ← Volver
+        </button>
+      </div>
+
+      <!-- VISTA 2: LOBBY DE ESPERA -->
+      <div id="mp-lobby-view" class="hidden">
+        <div style="color:#94a3b8; font-size:0.8rem;">SALA ACTIVA:</div>
+        <div id="room-code-display" class="input-code" style="color:#ffbe0b;">FRANCHU</div>
+        
+        <div id="connection-status-badge" class="status-badge status-waiting">
+          🟡 Conectando a la sala...
+        </div>
+
+        <button class="btn btn-secondary" style="font-size:0.8rem; padding:8px 10px; margin-bottom:10px; width:100%;" onclick="copyRoomLink()">
+          📋 Copiar Enlace para WhatsApp
+        </button>
+
+        <h3 style="font-family:'Orbitron'; font-size:0.85rem; margin: 6px 0; color:#38bdf8;">
+          JUGADORES EN LA SALA (<span id="player-count">1</span>/4)
+        </h3>
+        <div id="lobby-player-list" style="margin-bottom: 10px;"></div>
+
+        <button id="start-online-btn" class="btn btn-main" style="width:100%;" onclick="launchGameFromLobby()">
+          🔥 ¡INICIAR PARTIDA!
+        </button>
+        <button class="btn btn-secondary" style="margin-top:8px; font-size: 0.75rem; width:100%;" onclick="showMainMenu()">
+          Salir de la Sala
+        </button>
+      </div>
+    </div>
+
+    <div></div>
+  </div>
+
+  <!-- PANTALLA 3: SELECCIÓN DE PERSONAJE -->
+  <div id="screen-character" class="screen hidden">
+    <div class="header-box">
+      <h1 class="title">ELEGÍ TU GUERRERO</h1>
+      <p class="subtitle">Tocá el personaje con el que querés competir:</p>
+    </div>
+
+    <div class="char-selection-container">
+      <div class="char-grid" id="char-grid-container"></div>
+    </div>
+
+    <div class="bottom-bar">
+      <button class="btn btn-secondary" onclick="showMainMenu()">← Volver</button>
+      <button class="btn btn-main" id="confirm-char-btn" onclick="confirmCharacterSelection()">
+        ⚔️ ¡ENTRAR AL LABERINTO!
+      </button>
+    </div>
+  </div>
+
+  <!-- PANTALLA 4: VICTORIA -->
+  <div id="screen-victory" class="screen hidden">
+    <div class="header-box">
+      <h1 class="title" style="color:#ffbe0b;" id="victory-title">¡VICTORIA!</h1>
+      <p class="subtitle" id="victory-subtitle">¡Capturó la Gran Estrella!</p>
+    </div>
+
+    <div class="modal-card" style="border-color:#ffbe0b;">
+      <img id="victory-char-img" src="" class="char-img" style="width:120px; height:140px; margin: 0 auto 8px auto; display:block;">
+      <h2 id="victory-char-name" style="font-family:'Orbitron'; font-size: 1.4rem; margin-bottom: 4px; color:#ffbe0b;">NOMBRE</h2>
+      <p id="victory-stats" style="color:#94a3b8; font-size:0.85rem; margin-bottom: 14px;">Tiempo: 00:45</p>
+
+      <div class="bottom-bar">
+        <button class="btn btn-accent" style="flex:1;" onclick="restartMatch()">🔄 OTRA VEZ</button>
+        <button class="btn btn-secondary" style="flex:1;" onclick="showMainMenu()">🏠 Menú</button>
+      </div>
+    </div>
+
+    <div></div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-box">
+      <div id="hud-player-avatar" style="width:28px; height:28px; border-radius:50%; background-size:cover;background-position:center 12%; border:2px solid #00f0ff;"></div>
+      <div>
+        <div id="hud-player-name" style="font-family:'Orbitron'; font-weight:800; font-size:0.8rem; color:#00f0ff;">TÚ</div>
+        <div id="hud-match-time" style="font-size:0.7rem; color:#94a3b8;">00:00</div>
+      </div>
+    </div>
+
+    <div class="hud-box star-radar">
+      <span>⭐ ESTRELLA:</span>
+      <span id="radar-arrow">▲</span>
+      <span id="star-distance">24m</span>
+    </div>
+
+    <button class="btn btn-secondary" onclick="showMainMenu()" style="pointer-events:auto;padding:8px;font-size:12px;flex:0">Menú</button>
+    <canvas id="minimap-canvas" width="70" height="70"></canvas>
+  </div>
+
+  <!-- CONTROLES TÁCTILES -->
+  <div id="touch-controls" class="hidden">
+    <div id="joystick-zone">
+      <div id="joystick-knob"></div>
+    </div>
+    <div id="sprint-btn">TURBO</div>
+  </div>
+
+  <!-- AUDIO BAR -->
+  <div id="play-help" class="hidden" style="position:absolute;bottom:12px;right:16px;z-index:12;color:#cbd5e1;font-size:14px;pointer-events:none">WASD / Flechas · Shift: turbo · Esc: menú</div>
+  <div class="audio-widget">
+    <button id="audio-toggle-btn" title="Activar/Silenciar Música" onclick="toggleAudio()">🔇</button>
+    <span style="font-size:0.7rem; color:#94a3b8;">Música</span>
+    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.4" style="width:45px;" onchange="setVolume(this.value)">
+  </div>
+
+  <script>
+    const CHARACTERS = [
+      {
+        id: "motoker",
+        name: "MOTOKER",
+        role: "Ciberpunk",
+        color: "#00f0ff",
+        hexColor: 0x00f0ff,
+        speed: 1.15,
+        ability: "Turbo Sprint (+15%)",
+        card: "./motoker.png",
+        token: "./motoker.png"
+      },
+      {
+        id: "cazador",
+        name: "CAZADOR",
+        role: "Guerrero Rúnico",
+        color: "#ff3b30",
+        hexColor: 0xff3b30,
+        speed: 1.05,
+        ability: "Alcance (+25%)",
+        card: "./cazador.png",
+        token: "./cazador.png"
+      },
+      {
+        id: "themoon",
+        name: "THE MOON",
+        role: "Ente Cósmico",
+        color: "#bf5af2",
+        hexColor: 0xbf5af2,
+        speed: 1.0,
+        ability: "Velocidad normal",
+        card: "./the-moon.png",
+        token: "./the-moon.png"
+      },
+      {
+        id: "silver",
+        name: "SILVER",
+        role: "Guardián Cristalino",
+        color: "#70d6ff",
+        hexColor: 0x70d6ff,
+        speed: 1.1,
+        ability: "Velocidad (+10%)",
+        card: "./silver.png",
+        token: "./silver.png"
+      }
+    ];
+
+    let selectedCharacterIndex = 0;
+    let isMultiplayer = false;
+    let roomCode = "FRANCHU";
+    let myClientId = "p_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,10);
+    let isHost = false;
+    let mqttClient = null;
+    let knownPeers = new Map();
+
+    const MAZE_SIZE = 21;
+    const CELL_SIZE = 4.0;
+    let mazeGrid = [];
+    let starPos = { x: 0, z: 0 };
+
+    let matchStartTime = 0;
+    let matchRunning = false;
+    let matchWon = false;
+
+    let scene, camera, renderer;
+    let playerMeshes = [];
+    let starMesh = null;
+    let mazeWallMeshes = [];
+
+    let localPlayer = {
+      id: myClientId,
+      name: "Tú",
+      charIndex: 0,
+      x: 0,
+      z: 0,
+      vx: 0,
+      vz: 0,
+      angle: 0,
+      isSprinting: false,
+      speed: 7.0
+    };
+
+    let players = [];
+    const keys = {};
+    let joystickData = { active: false, dx: 0, dy: 0 };
+    let isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+    /* ==========================================================================
+       AUDIO SYNTH
+       ========================================================================== */
+    let audioCtx = null;
+    let isAudioPlaying = false;
+    let masterGain = null;
+    let bgmInterval = null;
+
+    function initAudio() {
+      if (audioCtx) return;
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      audioCtx = new AudioContext();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.35;
+      masterGain.connect(audioCtx.destination);
+    }
+
+    function toggleAudio() {
+      initAudio();
+      if (!audioCtx) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      isAudioPlaying = !isAudioPlaying;
+      document.getElementById('audio-toggle-btn').innerText = isAudioPlaying ? "🔊" : "🔇";
+      if (isAudioPlaying) startRetroBGM();
+      else stopRetroBGM();
+    }
+
+    function setVolume(val) {
+      if (masterGain) masterGain.gain.value = parseFloat(val);
+    }
+
+    function startRetroBGM() {
+      stopRetroBGM();
+      if (!audioCtx) initAudio();
+      const notes = [110, 110, 130.81, 146.83, 164.81, 146.83, 130.81, 123.47];
+      let step = 0;
+      bgmInterval = setInterval(() => {
+        if (!isAudioPlaying || !audioCtx) return;
+        try {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(notes[step % notes.length], audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.07, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.16);
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.18);
+          step++;
+        } catch(e) {}
+      }, 190);
+    }
+
+    function stopRetroBGM() {
+      if (bgmInterval) {
+        clearInterval(bgmInterval);
+        bgmInterval = null;
+      }
+    }
+
+    function playSound(type) {
+      if (!audioCtx || !isAudioPlaying) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(masterGain);
+        if (type === 'star') {
+          osc.type = 'triangle';
+          const now = audioCtx.currentTime;
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.setValueAtTime(659.25, now + 0.1);
+          osc.frequency.setValueAtTime(783.99, now + 0.2);
+          osc.frequency.setValueAtTime(1046.50, now + 0.3);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+          osc.start(now);
+          osc.stop(now + 0.85);
+        }
+      } catch(e) {}
+    }
+
+    /* ==========================================================================
+       MAZE
+       ========================================================================== */
+    function generateMaze(size) {
+      const grid = Array.from({ length: size }, () => Array(size).fill(1));
+      function carve(x, y) {
+        grid[y][x] = 0;
+        const dirs = [[0, -2], [0, 2], [-2, 0], [2, 0]].sort(() => Math.random() - 0.5);
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx > 0 && nx < size - 1 && ny > 0 && ny < size - 1 && grid[ny][nx] === 1) {
+            grid[y + dy / 2][x + dx / 2] = 0;
+            carve(nx, ny);
+          }
+        }
+      }
+      carve(1, 1);
+      for (let i = 0; i < size * 2; i++) {
+        const rx = 1 + Math.floor(Math.random() * (size - 2));
+        const ry = 1 + Math.floor(Math.random() * (size - 2));
+        if (grid[ry][rx] === 1) grid[ry][rx] = 0;
+      }
+      const mid = Math.floor(size / 2);
+      grid[mid][mid] = 0;
+      grid[mid-1][mid] = 0; grid[mid+1][mid] = 0;
+      grid[mid][mid-1] = 0; grid[mid][mid+1] = 0;
+      return { grid, star: { x: mid, z: mid } };
+    }
+
+    /* ==========================================================================
+       3D SCENE
+       ========================================================================== */
+    function init3D() {
+      const container = document.getElementById('game-canvas');
+      container.innerHTML = '';
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x060914);
+      scene.fog = new THREE.FogExp2(0x060914, 0.022);
+
+      camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      const hemiLight = new THREE.HemisphereLight(0x9bdfff, 0x64748b, 1.5);
+      scene.add(hemiLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
+      dirLight.position.set(30, 60, 40);
+      dirLight.castShadow = true;
+      scene.add(dirLight);
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function onWindowResize() {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function build3DMaze(grid) {
+      mazeWallMeshes.forEach(m => scene.remove(m));
+      mazeWallMeshes = [];
+
+      const wallHeight = 1.6;
+      const wallGeo = new THREE.BoxGeometry(CELL_SIZE, wallHeight, CELL_SIZE);
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x405979, roughness: 0.5, metalness: 0.5 });
+
+      const wallInstanced = new THREE.InstancedMesh(wallGeo, wallMat, MAZE_SIZE * MAZE_SIZE);
+      wallInstanced.castShadow = true;
+      wallInstanced.receiveShadow = true;
+
+      const dummy = new THREE.Object3D();
+      let instanceCount = 0;
+      const half = (MAZE_SIZE * CELL_SIZE) / 2;
+
+      for (let y = 0; y < MAZE_SIZE; y++) {
+        for (let x = 0; x < MAZE_SIZE; x++) {
+          if (grid[y][x] === 1) {
+            const wx = x * CELL_SIZE - half + CELL_SIZE / 2;
+            const wz = y * CELL_SIZE - half + CELL_SIZE / 2;
+            dummy.position.set(wx, wallHeight / 2, wz);
+            dummy.updateMatrix();
+            wallInstanced.setMatrixAt(instanceCount++, dummy.matrix);
+          }
+        }
+      }
+      wallInstanced.count = instanceCount;
+      scene.add(wallInstanced);
+      mazeWallMeshes.push(wallInstanced);
+
+      const floorGeo = new THREE.PlaneGeometry(MAZE_SIZE * CELL_SIZE, MAZE_SIZE * CELL_SIZE);
+      const floorMat = new THREE.MeshStandardMaterial({ color: 0x0a101f, roughness: 0.7 });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      scene.add(floor);
+      mazeWallMeshes.push(floor);
+
+      const gridHelper = new THREE.GridHelper(MAZE_SIZE * CELL_SIZE, MAZE_SIZE, 0x00f0ff, 0x1e293b);
+      gridHelper.position.y = 0.02;
+      scene.add(gridHelper);
+      mazeWallMeshes.push(gridHelper);
+    }
+
+    function create3DStar(worldX, worldZ) {
+      if (starMesh) scene.remove(starMesh);
+      const starGroup = new THREE.Group();
+
+      const starShape = new THREE.Shape();
+      const points = 5;
+      for (let i = 0; i < points * 2; i++) {
+        const r = (i % 2 === 0) ? 1.2 : 0.55;
+        const a = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        if (i === 0) starShape.moveTo(px, py);
+        else starShape.lineTo(px, py);
+      }
+      starShape.closePath();
+
+      const extrudeSettings = { depth: 0.35, bevelEnabled: true, bevelSegments: 2, bevelSize: 0.1 };
+      const starGeo = new THREE.ExtrudeGeometry(starShape, extrudeSettings);
+      starGeo.center();
+
+      const starMat = new THREE.MeshStandardMaterial({
+        color: 0xffd700,
+        emissive: 0xffa500,
+        emissiveIntensity: 0.6,
+        roughness: 0.2,
+        metalness: 0.8
+      });
+      const starCore = new THREE.Mesh(starGeo, starMat);
+      starGroup.add(starCore);
+
+      const ringGeo = new THREE.TorusGeometry(1.5, 0.06, 16, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xffbe0b });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = Math.PI / 2;
+      starGroup.add(ring);
+
+      const starLight = new THREE.PointLight(0xffbe0b, 2.0, 16);
+      starGroup.add(starLight);
+
+      starGroup.position.set(worldX, 2.2, worldZ);
+      scene.add(starGroup);
+      starMesh = starGroup;
+    }
+
+    function createPlayerMesh(pData) {
+      const group = new THREE.Group();
+      const charInfo = CHARACTERS[pData.charIndex];
+
+      const baseGeo = new THREE.CylinderGeometry(0.85, 0.95, 0.3, 24);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.4 });
+      const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+      baseMesh.position.y = 0.15;
+      group.add(baseMesh);
+
+      const rimGeo = new THREE.TorusGeometry(0.88, 0.06, 16, 24);
+      const rimMat = new THREE.MeshBasicMaterial({ color: charInfo.hexColor });
+      const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+      rimMesh.rotation.x = Math.PI / 2;
+      rimMesh.position.y = 0.3;
+      group.add(rimMesh);
+
+      const textureLoader = new THREE.TextureLoader();
+      const tokenTexture = textureLoader.load(charInfo.token, texture => {
+        const aspect = texture.image.width / texture.image.height;
+        sprite.scale.set(3.8 * aspect, 3.8, 1);
+      });
+      const spriteMat = new THREE.SpriteMaterial({ map: tokenTexture, transparent: true, alphaTest: 0.08, depthWrite: false });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(2.55, 3.8, 1);
+      sprite.position.y = 2.0;
+      group.add(sprite);
+
+      const nameCanvas = document.createElement('canvas');
+      nameCanvas.width = 256;
+      nameCanvas.height = 64;
+      const ctx = nameCanvas.getContext('2d');
+      ctx.fillStyle = "rgba(10, 15, 30, 0.85)";
+      ctx.roundRect(10, 10, 236, 44, 10);
+      ctx.fill();
+      ctx.strokeStyle = charInfo.color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 24px Orbitron, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(pData.name, 128, 32);
+
+      const nameTexture = new THREE.CanvasTexture(nameCanvas);
+      const nameSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture, transparent: true }));
+      nameSprite.scale.set(2.0, 0.5, 1);
+      nameSprite.position.y = 4.2;
+      group.add(nameSprite);
+
+      const pLight = new THREE.PointLight(charInfo.hexColor, 1.4, 10);
+      pLight.position.set(0, 1.8, 0);
+      group.add(pLight);
+
+      scene.add(group);
+      return group;
+    }
+
+    function checkWallCollision(newX, newZ, radius = 0.6) {
+      const half = (MAZE_SIZE * CELL_SIZE) / 2;
+      const corners = [
+        { x: newX - radius, z: newZ - radius },
+        { x: newX + radius, z: newZ - radius },
+        { x: newX - radius, z: newZ + radius },
+        { x: newX + radius, z: newZ + radius }
+      ];
+      for (const pt of corners) {
+        const gridX = Math.floor((pt.x + half) / CELL_SIZE);
+        const gridZ = Math.floor((pt.z + half) / CELL_SIZE);
+        if (gridX < 0 || gridX >= MAZE_SIZE || gridZ < 0 || gridZ >= MAZE_SIZE) return true;
+        if (mazeGrid[gridZ][gridX] === 1) return true;
+      }
+      return false;
+    }
+
+    function setupMatchPlayers() {
+      players = [];
+      playerMeshes.forEach(m => scene.remove(m));
+      playerMeshes = [];
+
+      const half = (MAZE_SIZE * CELL_SIZE) / 2;
+      const spawnCoords = [
+        { x: 1, z: 1 },
+        { x: MAZE_SIZE - 2, z: 1 },
+        { x: 1, z: MAZE_SIZE - 2 },
+        { x: MAZE_SIZE - 2, z: MAZE_SIZE - 2 }
+      ];
+
+      localPlayer.charIndex = selectedCharacterIndex;
+      localPlayer.name = CHARACTERS[selectedCharacterIndex].name;
+      const rosterIds = isMultiplayer ? matchRoster.map(p => p.id) : [myClientId];
+      const mySpawn = spawnCoords[Math.max(0, rosterIds.indexOf(myClientId))];
+      localPlayer.x = mySpawn.x * CELL_SIZE - half + CELL_SIZE / 2;
+      localPlayer.z = mySpawn.z * CELL_SIZE - half + CELL_SIZE / 2;
+      localPlayer.speed = 7.0 * CHARACTERS[selectedCharacterIndex].speed;
+      localPlayer.isBot = false;
+      players.push(localPlayer);
+
+      if (!isMultiplayer) {
+        const availableIndices = [0, 1, 2, 3].filter(i => i !== selectedCharacterIndex);
+        for (let i = 0; i < 3; i++) {
+          const cIdx = availableIndices[i];
+          const spawn = spawnCoords[i + 1];
+          const bot = {
+            id: "bot_" + (i + 1),
+            name: CHARACTERS[cIdx].name + " (Bot)",
+            charIndex: cIdx,
+            x: spawn.x * CELL_SIZE - half + CELL_SIZE / 2,
+            z: spawn.z * CELL_SIZE - half + CELL_SIZE / 2,
+            speed: 6.0 * CHARACTERS[cIdx].speed,
+            isBot: true,
+            botDirChangeTimer: 0,
+            botDir: { dx: 0, dz: 0 }
+          };
+          players.push(bot);
+        }
+      } else {
+        let pIdx = 1;
+        knownPeers.forEach((pInfo, peerId) => {
+          const spawn = spawnCoords[Math.max(0, rosterIds.indexOf(peerId))];
+          const remotePlayer = {
+            id: peerId,
+            name: pInfo.name || ("Jugador " + (pIdx + 1)),
+            charIndex: pInfo.charIndex !== undefined ? pInfo.charIndex : ((selectedCharacterIndex + pIdx) % 4),
+            x: spawn.x * CELL_SIZE - half + CELL_SIZE / 2,
+            z: spawn.z * CELL_SIZE - half + CELL_SIZE / 2,
+            speed: 7.0,
+            isBot: false
+          };
+          players.push(remotePlayer);
+          pIdx++;
+        });
+      }
+
+      players.forEach(p => {
+        const m = createPlayerMesh(p);
+        m.position.set(p.x, 0, p.z);
+        playerMeshes.push(m);
+      });
+
+      document.getElementById('hud-player-name').innerText = CHARACTERS[selectedCharacterIndex].name;
+      document.getElementById('hud-player-avatar').style.backgroundImage = `url(${CHARACTERS[selectedCharacterIndex].token})`;
+    }
+
+    let lastTime = performance.now();
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      if (matchRunning && !matchWon) updateMatch(dt);
+
+      if (starMesh) {
+        starMesh.rotation.y += dt * 1.8;
+        starMesh.position.y = 2.2 + Math.sin(now * 0.003) * 0.35;
+      }
+
+      if (camera && playerMeshes[0]) {
+        const targetX = localPlayer.x;
+        const targetZ = localPlayer.z;
+        camera.position.x += (targetX - camera.position.x) * 0.1;
+        camera.position.y += (22.0 - camera.position.y) * 0.1;
+        camera.position.z += (targetZ + 9.0 - camera.position.z) * 0.1;
+        camera.lookAt(targetX, 1.5, targetZ);
+      }
+
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+
+      if (matchRunning) renderMinimap();
+    }
+
+    let syncBroadcastTimer = 0;
+    function updateMatch(dt) {
+      const elapsed = Math.floor((performance.now() - matchStartTime) / 1000);
+      const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const secs = String(elapsed % 60).padStart(2, '0');
+      document.getElementById('hud-match-time').innerText = `${mins}:${secs}`;
+
+      let moveX = 0;
+      let moveZ = 0;
+
+      if (keys['KeyW'] || keys['ArrowUp']) moveZ -= 1;
+      if (keys['KeyS'] || keys['ArrowDown']) moveZ += 1;
+      if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
+      if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+
+      if (joystickData.active) {
+        moveX += joystickData.dx;
+        moveZ += joystickData.dy;
+      }
+
+      const len = Math.hypot(moveX, moveZ);
+      if (len > 0.05) {
+        moveX = moveX / Math.max(1, len);
+        moveZ = moveZ / Math.max(1, len);
+        const sprintMult = (keys['ShiftLeft'] || keys['ShiftRight'] || localPlayer.isSprinting) ? 1.45 : 1.0;
+        const currentSpeed = localPlayer.speed * sprintMult;
+
+        const nextX = localPlayer.x + moveX * currentSpeed * dt;
+        const nextZ = localPlayer.z + moveZ * currentSpeed * dt;
+
+        if (!checkWallCollision(nextX, localPlayer.z)) localPlayer.x = nextX;
+        if (!checkWallCollision(localPlayer.x, nextZ)) localPlayer.z = nextZ;
+
+        localPlayer.angle = Math.atan2(moveX, moveZ);
+      }
+
+      if (playerMeshes[0]) {
+        playerMeshes[0].position.set(localPlayer.x, 0, localPlayer.z);
+        if (len > 0.05) playerMeshes[0].position.y = Math.abs(Math.sin(performance.now() * 0.012)) * 0.2;
+        else playerMeshes[0].position.y = 0;
+      }
+
+      const half = (MAZE_SIZE * CELL_SIZE) / 2;
+      const starWorldX = starPos.x * CELL_SIZE - half + CELL_SIZE / 2;
+      const starWorldZ = starPos.z * CELL_SIZE - half + CELL_SIZE / 2;
+
+      for (let i = 1; i < players.length; i++) {
+        const p = players[i];
+        if (p.isBot) {
+          if (!p.path) p.path = findRoute(p.x, p.z);
+          const target = p.path[0];
+          if (target) {
+            const dx = target.x - p.x, dz = target.z - p.z;
+            const distance = Math.hypot(dx, dz), step = p.speed * 0.7 * dt;
+            if (distance <= step) { p.x = target.x; p.z = target.z; p.path.shift(); }
+            else { p.x += dx / distance * step; p.z += dz / distance * step; }
+          }
+          if (playerMeshes[i]) playerMeshes[i].position.set(p.x, 0, p.z);
+        }
+      }
+
+      const dxStar = starWorldX - localPlayer.x;
+      const dzStar = starWorldZ - localPlayer.z;
+      const starDist = Math.hypot(dxStar, dzStar);
+      document.getElementById('star-distance').innerText = `${Math.round(starDist)}m`;
+      const deg = Math.atan2(dxStar, -dzStar) * (180 / Math.PI);
+      document.getElementById('radar-arrow').style.transform = `rotate(${deg}deg)`;
+
+      players.forEach((p) => {
+        if (matchWon || (isMultiplayer && !isHost)) return;
+        const pickupRadius = (p.charIndex === 1) ? 2.5 : 2.0;
+        const d = Math.hypot(starWorldX - p.x, starWorldZ - p.z);
+        if (d < pickupRadius) {
+          triggerVictory(p);
+          if (isMultiplayer) {
+            sendNetMessage({ type: 'victory', id: p.id, name: p.name, charIndex: p.charIndex });
+          }
+        }
+      });
+
+      if (isMultiplayer) {
+        syncBroadcastTimer += dt;
+        if (syncBroadcastTimer > 0.08) {
+          syncBroadcastTimer = 0;
+          sendNetMessage({ type: 'pos', id: localPlayer.id, x: localPlayer.x, z: localPlayer.z });
+        }
+      }
+    }
+
+    function triggerVictory(winner) {
+      if (matchWon || !matchRunning) return;
+      matchWon = true;
+      playSound('star');
+      startFireworks();
+      const charInfo = CHARACTERS[winner.charIndex];
+      document.getElementById('victory-title').innerText = (winner.id === localPlayer.id) ? "¡GANASTE LA CARRERA!" : "¡PARTIDA TERMINADA!";
+      document.getElementById('victory-subtitle').innerText = `${winner.name} consiguió la Gran Estrella.`;
+      document.getElementById('victory-char-img').src = charInfo.card;
+      document.getElementById('victory-char-name').innerText = charInfo.name;
+      document.getElementById('victory-char-name').style.color = charInfo.color;
+      const elapsed = Math.floor((performance.now() - matchStartTime) / 1000);
+      document.getElementById('victory-stats').innerText = `Tiempo de carrera: ${elapsed}s • Personaje: ${charInfo.role}`;
+
+      document.getElementById('hud').classList.add('hidden');
+      document.getElementById('touch-controls').classList.add('hidden');
+      document.getElementById('screen-victory').classList.remove('hidden');
+    }
+
+    function renderMinimap() {
+      const canvas = document.getElementById('minimap-canvas');
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const cellW = w / MAZE_SIZE, cellH = h / MAZE_SIZE;
+      ctx.fillStyle = "rgba(30, 41, 59, 0.85)";
+      for (let y = 0; y < MAZE_SIZE; y++) {
+        for (let x = 0; x < MAZE_SIZE; x++) {
+          if (mazeGrid[y][x] === 1) ctx.fillRect(x * cellW, y * cellH, cellW + 0.5, cellH + 0.5);
+        }
+      }
+
+      ctx.fillStyle = "#ffbe0b";
+      ctx.beginPath();
+      ctx.arc(starPos.x * cellW + cellW / 2, starPos.z * cellH + cellH / 2, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      const half = (MAZE_SIZE * CELL_SIZE) / 2;
+      players.forEach((p, idx) => {
+        const mapX = ((p.x + half) / (MAZE_SIZE * CELL_SIZE)) * w;
+        const mapZ = ((p.z + half) / (MAZE_SIZE * CELL_SIZE)) * h;
+        ctx.fillStyle = CHARACTERS[p.charIndex].color;
+        ctx.beginPath();
+        ctx.arc(mapX, mapZ, (idx === 0) ? 4.5 : 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        if (idx === 0) {
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      });
+    }
+
+    /* ==========================================================================
+       UI
+       ========================================================================== */
+    function populateCharacterGrid() {
+      const container = document.getElementById('char-grid-container');
+      container.innerHTML = '';
+      CHARACTERS.forEach((c, idx) => {
+        const card = document.createElement('div');
+        card.className = `char-card ${idx === selectedCharacterIndex ? 'selected' : ''}`;
+        card.onclick = () => selectCharacter(idx);
+        card.innerHTML = `
+          <div class="check-tag">✓ LISTO</div>
+          <img src="${c.card}" class="char-img" alt="${c.name}">
+          <div class="char-name" style="color: ${c.color};">${c.name}</div>
+          <div class="char-role">${c.role}</div>
+          <div class="char-ability">${c.ability}</div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function selectCharacter(idx) {
+      selectedCharacterIndex = idx;
+      document.querySelectorAll('.char-card').forEach((el, i) => {
+        el.classList.toggle('selected', i === idx);
+      });
+      const btn = document.getElementById('confirm-char-btn');
+      if (btn) {
+        btn.innerText = "⚔️ ¡JUGAR CON " + CHARACTERS[idx].name + "!";
+      }
+    }
+
+    function stopMatch() {
+      matchRunning = false; matchWon = false;
+      for (const key in keys) delete keys[key];
+      endJoystick(); localPlayer.isSprinting = false;
+      ['hud','touch-controls','play-help'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    }
+    function showMainMenu() {
+      stopMatch(); leaveRoom(); isMultiplayer = false;
+      hideAllScreens(); document.getElementById('screen-menu').classList.remove('hidden');
+    }
+    function startSoloMode() {
+      stopMatch(); leaveRoom(); isMultiplayer = false;
+      hideAllScreens(); document.getElementById('screen-character').classList.remove('hidden');
+      selectCharacter(selectedCharacterIndex);
+    }
+    function showMultiplayerMenu() {
+      stopMatch(); leaveRoom(); isMultiplayer = true;
+      hideAllScreens(); document.getElementById('screen-character').classList.remove('hidden');
+      selectCharacter(selectedCharacterIndex);
+    }
+    function confirmCharacterSelection() {
+      if (isMultiplayer) { showLobby(); return; }
+      startMatch();
+    }
+    function showLobby() {
+      hideAllScreens(); document.getElementById('screen-multiplayer').classList.remove('hidden');
+      document.getElementById('mp-choice-view').classList.remove('hidden');
+      document.getElementById('mp-lobby-view').classList.add('hidden');
+    }
+
+    function hideAllScreens() {
+      document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+    }
+
+    function startMatch() {
+      hideAllScreens();
+      document.getElementById('hud').classList.remove('hidden');
+      if (isTouchDevice) document.getElementById('touch-controls').classList.remove('hidden');
+      else document.getElementById('play-help').classList.remove('hidden');
+
+      if (!isMultiplayer) {
+        const mazeData = generateMaze(MAZE_SIZE);
+        mazeGrid = mazeData.grid;
+        starPos = mazeData.star;
+        if (isMultiplayer) {
+          sendNetMessage({ type: 'init_game', grid: mazeGrid, star: starPos });
+        }
+      }
+
+      build3DMaze(mazeGrid);
+      const half = (MAZE_SIZE * CELL_SIZE) / 2;
+      create3DStar(starPos.x * CELL_SIZE - half + CELL_SIZE / 2, starPos.z * CELL_SIZE - half + CELL_SIZE / 2);
+
+      setupMatchPlayers();
+
+      matchStartTime = performance.now();
+      matchRunning = true;
+      matchWon = false;
+
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    }
+
+    function restartMatch() {
+      if (isMultiplayer) {
+        clearInterval(startRetry); pendingGame = null; matchId = null;
+        stopMatch(); hideAllScreens(); document.getElementById('screen-multiplayer').classList.remove('hidden');
+        ready = true; announce(); updateLobbyUI();
+      } else startMatch();
+    }
+
+    /* ==========================================================================
+       CONEXIÓN MULTIJUGADOR INSTANTÁNEA (MQTT OVER WEBSOCKETS)
+       ========================================================================== */
+    let pendingGame = null, loadedPlayers = new Set(), loadDeadline = 0, startRetry = null;
+    let roomEpoch = 0, heartbeat = null, connected = false, ready = true;
+    let joinedAt = 0, hostId = null, matchId = null, matchRoster = [], roomSince = 0;
+    function status(text, kind = 'waiting') {
+      const badge = document.getElementById('connection-status-badge');
+      badge.className = 'status-badge status-' + kind; badge.textContent = text;
+    }
+    function leaveRoom() {
+      if (connected) sendNetMessage({type:'leave'});
+      clearInterval(startRetry); startRetry = null; pendingGame = null; loadedPlayers.clear();
+      roomEpoch++; connected = false; clearInterval(heartbeat); heartbeat = null;
+      if (mqttClient) { mqttClient.onConnectionLost = () => {}; try { mqttClient.disconnect(); } catch {} }
+      mqttClient = null; knownPeers.clear(); hostId = null; isHost = false; matchId = null; matchRoster = [];
+    }
+    function roster() {
+      return [{id:myClientId,name:CHARACTERS[selectedCharacterIndex].name,charIndex:selectedCharacterIndex,joinedAt,ready},
+        ...Array.from(knownPeers, ([id,p]) => ({id,...p}))]
+        .sort((a,b) => a.joinedAt-b.joinedAt || a.id.localeCompare(b.id));
+    }
+    function announce() { sendNetMessage({type:'presence',charIndex:selectedCharacterIndex,joinedAt,ready}); }
+    function joinRoomWithName() {
+      const val = document.getElementById('room-name-input').value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,30);
+      if (!val) { status('Escribí un nombre de sala.','error'); return; }
+      leaveRoom(); isMultiplayer = true; roomCode = val; joinedAt = Date.now(); roomSince = Date.now(); ready = true;
+      document.getElementById('room-code-display').textContent = roomCode;
+      document.getElementById('mp-choice-view').classList.add('hidden');
+      document.getElementById('mp-lobby-view').classList.remove('hidden');
+      status('Conectando a ' + roomCode + '…'); updateLobbyUI();
+      connectMqttRoom(roomCode);
+    }
+    function connectMqttRoom(room) {
+      const epoch = roomEpoch;
+      const endpoints = [['broker.emqx.io',8084],['broker.hivemq.com',8884]];
+      function attempt(index) {
+        if (epoch !== roomEpoch) return;
+        if (index >= endpoints.length) { status('No se pudo conectar. Salí y volvé a intentar.','error'); return; }
+        const [host,port] = endpoints[index];
+        try {
+          const client = new Paho.MQTT.Client(host,port,'/mqtt',myClientId);
+          mqttClient = client;
+          client.onConnectionLost = () => {
+            if (epoch !== roomEpoch) return;
+            connected = false; clearInterval(heartbeat); clearInterval(startRetry); pendingGame = null; stopMatch();
+            hideAllScreens(); document.getElementById('screen-multiplayer').classList.remove('hidden');
+            status('Se cortó la conexión. Salí y volvé a entrar.','error'); updateLobbyUI();
+          };
+          client.onMessageArrived = msg => {
+            if (epoch !== roomEpoch) return;
+            try { const data = JSON.parse(msg.payloadString); if (data.senderId !== myClientId) handleNetMessage(data); } catch(e) { console.warn('Mensaje descartado',e.message); }
+          };
+          client.connect({useSSL:true,timeout:8,onSuccess:() => {
+            if (epoch !== roomEpoch) { client.disconnect(); return; }
+            client.subscribe('fran-battle-v3/' + room,{qos:1,onSuccess:() => {
+              if (epoch !== roomEpoch) return;
+              connected = true; announce(); sendNetMessage({type:'hello'});
+              heartbeat = setInterval(() => {
+                const now = Date.now();
+                for (const [id,p] of knownPeers) if (now-p.seen > 15000) removePeer(id);
+                announce(); updateLobbyUI();
+              },2000);
+              updateLobbyUI();
+            },onFailure:() => { client.disconnect(); attempt(index+1); }});
+          },onFailure:() => attempt(index+1)});
+        } catch { attempt(index+1); }
+      }
+      attempt(0);
+    }
+    function sendNetMessage(payload) {
+      if (!mqttClient || !mqttClient.isConnected()) return;
+      try {
+        const msg = new Paho.MQTT.Message(JSON.stringify({...payload,senderId:myClientId,matchId:payload.matchId || matchId}));
+        msg.destinationName = 'fran-battle-v3/' + roomCode;
+        msg.qos = payload.type === 'pos' ? 0 : 1;
+        mqttClient.send(msg);
+      } catch(e) { console.warn('No se pudo enviar',e.message); }
+    }
+    function removePeer(id) {
+      const wasHost = id === hostId;
+      knownPeers.delete(id);
+      const index = players.findIndex(p => p.id === id);
+      if (index > 0) { scene.remove(playerMeshes[index]); playerMeshes.splice(index,1); players.splice(index,1); }
+      if (wasHost && (matchRunning || pendingGame)) {
+        clearInterval(startRetry); pendingGame = null; matchId = null;
+        stopMatch(); hideAllScreens(); document.getElementById('screen-multiplayer').classList.remove('hidden');
+        ready = true; announce();
+      }
+    }
+    function handleNetMessage(data) {
+      if (!data || typeof data.senderId !== 'string' || data.senderId.length > 80) return;
+      if (data.type === 'hello') { announce(); return; }
+      if (data.type === 'presence') {
+        if (!Number.isInteger(data.charIndex) || data.charIndex < 0 || data.charIndex > 3 || !Number.isFinite(data.joinedAt)) return;
+        knownPeers.set(data.senderId,{name:CHARACTERS[data.charIndex].name,charIndex:data.charIndex,joinedAt:data.joinedAt,ready:!!data.ready,seen:Date.now()});
+        updateLobbyUI(); return;
+      }
+      if (!knownPeers.has(data.senderId)) return;
+      knownPeers.get(data.senderId).seen = Date.now();
+      if (data.type === 'leave') { removePeer(data.senderId); updateLobbyUI(); return; }
+      if (data.type === 'init_game') {
+        if (data.senderId !== hostId || !Array.isArray(data.roster) || data.roster.length > 4 || !data.roster.some(p => p.id === myClientId)) return;
+        if (!Array.isArray(data.grid) || data.grid.length !== MAZE_SIZE || data.grid.some(row => !Array.isArray(row) || row.length !== MAZE_SIZE || row.some(v => v!==0 && v!==1))) return;
+        if (!data.star || !Number.isInteger(data.star.x) || !Number.isInteger(data.star.z) || data.grid[data.star.z]?.[data.star.x] !== 0) return;
+        if (data.roster.some(p => typeof p.id !== 'string' || !Number.isInteger(p.charIndex) || p.charIndex < 0 || p.charIndex > 3)) return;
+        if (data.matchId === matchId) { sendNetMessage({type:'loaded'}); return; }
+        prepareOnline(data); return;
+      }
+      if (data.matchId !== matchId) return;
+      if (data.type === 'loaded' && isHost && pendingGame) {
+        loadedPlayers.add(data.senderId); maybeStartOnline(); return;
+      }
+      if (data.type === 'start' && data.senderId === hostId && pendingGame) { releaseOnline(); return; }
+      if (data.type === 'cancel_start' && data.senderId === hostId && pendingGame) { cancelOnlineStart('La carga se interrumpió. Volvé a iniciar.'); return; }
+      if (!matchRunning) return;
+      if (data.type === 'pos') {
+        const remote = players.find(p => p.id === data.senderId);
+        if (!remote || !Number.isFinite(data.x) || !Number.isFinite(data.z) || checkWallCollision(data.x,data.z)) return;
+        remote.x = data.x; remote.z = data.z;
+        const mesh = playerMeshes[players.indexOf(remote)]; if (mesh) mesh.position.set(remote.x,0,remote.z);
+      } else if (data.type === 'victory' && data.senderId === hostId) {
+        const winner = players.find(p => p.id === data.id); if (winner) triggerVictory(winner);
+      }
+    }
+    function prepareOnline(data) {
+      pendingGame = data; loadedPlayers = new Set(); loadDeadline = Date.now()+25000;
+      matchId = data.matchId; mazeGrid = data.grid; starPos = data.star; matchRoster = data.roster;
+      knownPeers = new Map();
+      for (const p of matchRoster) if (p.id !== myClientId) knownPeers.set(p.id,{...p,seen:Date.now()});
+      ready = false;
+      try {
+        startMatch(); matchRunning = false;
+        camera.position.set(localPlayer.x,22,localPlayer.z+9);
+        camera.lookAt(localPlayer.x,1.5,localPlayer.z);
+        renderer.render(scene,camera);
+        hideAllScreens(); document.getElementById('screen-multiplayer').classList.remove('hidden');
+        loadedPlayers.add(myClientId); sendNetMessage({type:'loaded'}); announce();
+        clearInterval(startRetry);
+        startRetry = setInterval(() => {
+          if (!pendingGame) return;
+          if (Date.now()>loadDeadline) {
+            if (isHost) sendNetMessage({type:'cancel_start'});
+            cancelOnlineStart('No cargaron todos. Revisá la conexión y volvé a iniciar.'); return;
+          }
+          if (isHost) { sendNetMessage(pendingGame); maybeStartOnline(); }
+          else sendNetMessage({type:'loaded'});
+        },1000);
+        updateLobbyUI(); maybeStartOnline();
+      } catch(e) {
+        console.error('Error cargando partida',e);
+        if (isHost) sendNetMessage({type:'cancel_start'});
+        cancelOnlineStart('No se pudo cargar el mapa. Recargá la página e intentá otra vez.');
+      }
+    }
+    function maybeStartOnline() {
+      if (!isHost || !pendingGame || !matchRoster.every(p=>loadedPlayers.has(p.id))) return;
+      sendNetMessage({type:'start'}); releaseOnline();
+    }
+    function releaseOnline() {
+      clearInterval(startRetry); startRetry = null; pendingGame = null;
+      hideAllScreens();
+      document.getElementById('hud').classList.remove('hidden');
+      document.getElementById(isTouchDevice?'touch-controls':'play-help').classList.remove('hidden');
+      matchStartTime = performance.now(); matchWon = false; matchRunning = true;
+    }
+    function cancelOnlineStart(message) {
+      clearInterval(startRetry); startRetry = null; pendingGame = null; matchId = null;
+      stopMatch(); ready = true; announce(); hideAllScreens();
+      document.getElementById('screen-multiplayer').classList.remove('hidden');
+      updateLobbyUI(); status(message,'error');
+    }
+    function updateLobbyUI() {
+      const members = roster(); if (!matchRunning && !pendingGame) hostId = members[0].id; isHost = hostId === myClientId;
+      document.getElementById('player-count').textContent = members.length;
+      const list = document.getElementById('lobby-player-list'); list.replaceChildren();
+      for (const p of members) {
+        const row = document.createElement('div'); row.className = 'player-row';
+        row.textContent = (p.id === hostId ? '👑 ' : '') + p.name + (p.id === myClientId ? ' (vos)' : '') + (p.ready ? ' · Listo' : ' · En partida'); list.appendChild(row);
+      }
+      const btn = document.getElementById('start-online-btn');
+      btn.disabled = !!pendingGame || !connected || !isHost || members.length < 2 || members.length > 4 || members.some(p => !p.ready) || Date.now()-roomSince < 2200;
+      btn.style.opacity = btn.disabled ? '.5' : '1';
+      btn.textContent = isHost ? '🔥 ¡INICIAR PARTIDA!' : 'Esperando al anfitrión…';
+      if (pendingGame) { status('Cargando mapa: '+(isHost ? loadedPlayers.size+'/'+matchRoster.length : 'esperando a los demás')+'…'); return; }
+      if (connected) status(members.length > 4 ? 'Sala llena: máximo 4 jugadores.' : members.length < 2 ? 'Conectado. Compartí el enlace con un amigo.' : members.some(p => !p.ready) ? 'Esperando que todos vuelvan a la sala…' : members.length + ' jugadores conectados. '+(isHost ? 'Podés iniciar.' : 'El anfitrión inicia.'), members.length > 4 ? 'error' : 'connected');
+    }
+    async function copyRoomLink() {
+      const url = new URL(location.href); url.search = ''; url.searchParams.set('room',roomCode);
+      try { await navigator.clipboard.writeText(url.href); status('¡Enlace copiado! Pasalo por WhatsApp.','connected'); }
+      catch { prompt('Copiá este enlace:',url.href); }
+    }
+    function launchGameFromLobby() {
+      updateLobbyUI(); if (document.getElementById('start-online-btn').disabled) return;
+      const maze = generateMaze(MAZE_SIZE);
+      const data = {type:'init_game',matchId:myClientId+'_'+Date.now(),grid:maze.grid,star:maze.star,roster:roster()};
+      sendNetMessage(data); prepareOnline(data);
+    }
+    function findRoute(x,z) {
+      const half = MAZE_SIZE*CELL_SIZE/2;
+      const sx = Math.floor((x+half)/CELL_SIZE), sz = Math.floor((z+half)/CELL_SIZE);
+      const queue = [[sx,sz]], prev = new Map([[sx+','+sz,null]]);
+      for (let i=0;i<queue.length;i++) {
+        const [cx,cz] = queue[i]; if (cx===starPos.x && cz===starPos.z) break;
+        for (const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          const nx=cx+dx,nz=cz+dz,key=nx+','+nz;
+          if (mazeGrid[nz]?.[nx]===0 && !prev.has(key)) {prev.set(key,[cx,cz]);queue.push([nx,nz]);}
+        }
+      }
+      let pos=[starPos.x,starPos.z]; const route=[];
+      if (!prev.has(pos.join(','))) return route;
+      while (pos) {route.push({x:pos[0]*CELL_SIZE-half+CELL_SIZE/2,z:pos[1]*CELL_SIZE-half+CELL_SIZE/2});pos=prev.get(pos.join(','));}
+      return route.reverse().slice(1);
+    }
+    window.addEventListener('load', () => {
+      const room = new URLSearchParams(location.search).get('room');
+      if (room) { document.getElementById('room-name-input').value = room; showMultiplayerMenu(); }
+    });
+    window.addEventListener('pagehide',leaveRoom);
+
+    /* ==========================================================================
+       CONTROLS
+       ========================================================================== */
+    window.addEventListener('keydown', (e) => {
+      if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+      if (e.code === 'Escape') { showMainMenu(); return; }
+      if (matchRunning && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+      keys[e.code] = true;
+      if (e.code === 'KeyM') toggleAudio();
+      if (e.code === 'KeyR' && matchWon) restartMatch();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+
+    const jZone = document.getElementById('joystick-zone');
+    const jKnob = document.getElementById('joystick-knob');
+    let touchId = null;
+    let originX = 0, originY = 0;
+
+    jZone.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      touchId = touch.identifier;
+      const rect = jZone.getBoundingClientRect();
+      originX = rect.left + rect.width / 2;
+      originY = rect.top + rect.height / 2;
+      updateJoystick(touch.clientX, touch.clientY);
+    });
+
+    window.addEventListener('touchmove', (e) => {
+      if (touchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === touchId) {
+          updateJoystick(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+          break;
+        }
+      }
+    });
+
+    function endJoystick() {
+      touchId = null;
+      joystickData.active = false;
+      joystickData.dx = 0;
+      joystickData.dy = 0;
+      jKnob.style.transform = `translate(0px, 0px)`;
+    }
+
+    window.addEventListener('touchend', (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === touchId) {
+          endJoystick();
+          break;
+        }
+      }
+    });
+
+    function updateJoystick(clientX, clientY) {
+      const maxDist = 38;
+      let dx = clientX - originX;
+      let dy = clientY - originY;
+      const dist = Math.hypot(dx, dy);
+      if (dist > maxDist) {
+        dx = (dx / dist) * maxDist;
+        dy = (dy / dist) * maxDist;
+      }
+      jKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+      joystickData.active = true;
+      joystickData.dx = dx / maxDist;
+      joystickData.dy = dy / maxDist;
+    }
+
+    const sprintBtn = document.getElementById('sprint-btn');
+    sprintBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      localPlayer.isSprinting = true;
+    });
+    sprintBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      localPlayer.isSprinting = false;
+    });
+
+    /* ==========================================================================
+       FIREWORKS
+       ========================================================================== */
+    function startFireworks() {
+      const fxCanvas = document.getElementById('fx-canvas');
+      fxCanvas.width = window.innerWidth;
+      fxCanvas.height = window.innerHeight;
+      const ctx = fxCanvas.getContext('2d');
+      const particles = [];
+      const colors = ['#00f0ff', '#ffbe0b', '#ff3b30', '#bf5af2', '#ffffff'];
+      for (let i = 0; i < 120; i++) {
+        particles.push({
+          x: fxCanvas.width / 2,
+          y: fxCanvas.height / 2,
+          vx: (Math.random() - 0.5) * 12,
+          vy: (Math.random() - 0.5) * 12,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: Math.random() * 4 + 2,
+          life: 1.0
+        });
+      }
+      function renderFx() {
+        ctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+        let alive = false;
+        particles.forEach(p => {
+          if (p.life > 0) {
+            alive = true;
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.15;
+            p.life -= 0.015;
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        });
+        ctx.globalAlpha = 1.0;
+        if (alive && matchWon) requestAnimationFrame(renderFx);
+        else ctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+      }
+      renderFx();
+    }
+
+    window.addEventListener('blur', () => { for (const key in keys) delete keys[key]; endJoystick(); localPlayer.isSprinting = false; });
+    window.addEventListener('touchcancel', () => { endJoystick(); localPlayer.isSprinting = false; });
+    window.addEventListener('DOMContentLoaded', () => {
+      populateCharacterGrid();
+      init3D();
+      animate();
+    });
+  </script>
+</body>
+</html>
