@@ -587,7 +587,7 @@
       <p id="victory-stats" style="color:#94a3b8; font-size:0.85rem; margin-bottom: 14px;">Tiempo: 00:45</p>
 
       <div class="bottom-bar">
-        <button class="btn btn-accent" style="flex:1;" onclick="restartMatch()">🔄 OTRA VEZ</button>
+        <button class="btn btn-accent" style="flex:1;" onclick="restartMatch()">🔄 Revancha</button>
         <button class="btn btn-secondary" style="flex:1;" onclick="showMainMenu()">🏠 Menú</button>
       </div>
     </div>
@@ -1228,7 +1228,7 @@
       playSound('star');
       startFireworks();
       const charInfo = CHARACTERS[winner.charIndex];
-      document.getElementById('victory-title').innerText = (winner.id === localPlayer.id) ? "¡GANASTE LA CARRERA!" : "¡PARTIDA TERMINADA!";
+      document.getElementById('victory-title').innerText = (winner.id === localPlayer.id) ? "¡GANASTE LA CARRERA!" : "Ja perdiste, ¡POU!";
       document.getElementById('victory-subtitle').innerText = `${winner.name} consiguió la Gran Estrella.`;
       document.getElementById('victory-char-img').src = charInfo.card;
       document.getElementById('victory-char-name').innerText = charInfo.name;
