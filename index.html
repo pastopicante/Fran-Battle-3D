@@ -959,33 +959,101 @@
       starMesh = starGroup;
     }
 
+    // Articulated game avatars. Card portraits remain the original character art.
+    function createFighterRig(index) {
+      const rig=new THREE.Group(), body=new THREE.Group(); rig.add(body);
+      const color=CHARACTERS[index].hexColor;
+      const mat=(c,metal=0)=>new THREE.MeshStandardMaterial({color:c,metalness:metal,roughness:metal?0.32:0.75});
+      const dark=mat(index===2?0x20263e:0x191c23), armor=mat(index===3?0xc4d9e5:index===1?0x777d83:0x303742,index===3?0.8:0.5);
+      const cloth=mat(index===1?0xc4b49a:index===2?0x293350:0x25272a), gold=mat(0xe6b74e,0.25), white=mat(0xe4e1d7,0.2);
+      const glow=new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:0.8,roughness:0.25});
+      function box(parent,w,h,d,x,y,z,material){const limb=w<0.35&&h>0.35;const geometry=limb?new THREE.CylinderGeometry(w*0.45,w*0.53,h,10):new THREE.BoxGeometry(w,h,d);const o=new THREE.Mesh(geometry,material);o.position.set(x,y,z);parent.add(o);return o;}
+      function ball(parent,r,x,y,z,material){const o=new THREE.Mesh(new THREE.SphereGeometry(r,16,12),material);o.position.set(x,y,z);parent.add(o);return o;}
+      function cone(parent,r,h,x,y,z,material){const o=new THREE.Mesh(new THREE.ConeGeometry(r,h,6),material);o.position.set(x,y,z);parent.add(o);return o;}
+      const hips=new THREE.Group(); hips.position.y=1.45;body.add(hips);
+      box(hips,0.64,0.28,0.4,0,0,0,dark);
+      const torso=new THREE.Group();torso.position.y=0.18;hips.add(torso);
+      const chest=box(torso,0.88,0.87,0.49,0,0.48,0,index===3?armor:cloth);
+      box(torso,0.9,0.1,0.52,0,0.06,0,dark);
+      if(index===0){box(torso,0.12,0.8,0.025,0,0.49,0.258,armor);box(torso,0.43,0.15,0.1,0.16,0.65,0.3,dark);}
+      if(index===1){box(torso,0.15,0.66,0.04,0,0.47,0.27,mat(0x702a32));box(torso,0.55,0.13,0.04,0,0.58,0.29,mat(0x702a32));}
+      if(index===2){const scarf=cone(torso,0.47,0.65,0,0.62,0.18,gold);scarf.rotation.z=Math.PI;}
+      if(index===3){box(torso,0.61,0.36,0.06,0,0.59,0.29,white);ball(torso,0.12,0,0.66,0.35,glow);}
+      const head=new THREE.Group();head.position.y=1.22;torso.add(head);
+      if(index===0){const helmet=ball(head,0.4,0,0.12,0,white);helmet.scale.y=1.08;const visor=ball(head,0.36,0,0.13,0.15,dark);visor.scale.set(1,0.58,0.65);box(head,0.36,0.08,0.05,0,-0.16,0.32,armor);}
+      if(index===1){box(head,0.54,0.65,0.52,0,0.12,0,armor);box(head,0.39,0.08,0.04,0,0.17,0.28,dark);box(head,0.07,0.48,0.045,0,0.01,0.29,dark);for(let k=0;k<5;k++){let a=k*Math.PI*2/5;cone(head,0.085,0.55,Math.sin(a)*0.29,0.61,Math.cos(a)*0.26,armor);}}
+      if(index>=2){ball(head,0.4,0,0.12,0,index===2?dark:armor);const eye=ball(head,0.19,0,0.12,0.34,white);eye.scale.set(1.2,0.65,0.4);ball(head,0.085,0,0.12,0.42,dark);ball(head,0.025,-0.025,0.15,0.49,white);
+        for(let k=0;k<5;k++){const a=k*Math.PI*2/5;if(index===2)ball(head,0.065,Math.sin(a)*0.59,0.12+Math.cos(a)*0.59,0,gold);else {const flame=cone(head,0.13,0.55+(k%2)*0.2,Math.sin(a)*0.24,0.67,Math.cos(a)*0.2,glow);flame.rotation.z=Math.sin(a)*-0.22;}}}
+      const legs=[],arms=[];
+      for(const side of [-1,1]){
+        const hip=new THREE.Group();hip.position.set(side*0.24,-0.03,0);hips.add(hip);
+        box(hip,0.29,0.7,0.32,0,-0.36,0,index===3?armor:cloth);
+        const knee=new THREE.Group();knee.position.y=-0.78;hip.add(knee);ball(knee,0.18,0,0,0,armor);
+        box(knee,0.25,0.64,0.28,0,-0.34,0,index===3?armor:dark);
+        const foot=new THREE.Group();foot.position.y=-0.72;knee.add(foot);box(foot,0.31,0.2,0.55,0,0,0.15,index===3?armor:dark);
+        legs.push({hip,knee,foot});
+        const shoulder=new THREE.Group();shoulder.position.set(side*0.56,0.8,0);torso.add(shoulder);ball(shoulder,0.23,0,0,0,armor);
+        box(shoulder,0.23,0.46,0.25,0,-0.26,0,index===3?armor:cloth);
+        const elbow=new THREE.Group();elbow.position.y=-0.52;shoulder.add(elbow);ball(elbow,0.13,0,0,0,armor);
+        box(elbow,0.21,0.4,0.23,0,-0.22,0,index===3?armor:dark);ball(elbow,0.16,0,-0.46,0,index===3?armor:dark);
+        arms.push({shoulder,elbow});
+        if(index===1&&side===1){const sword=box(elbow,0.09,1.2,0.15,0,-0.48,0.65,white);sword.rotation.x=Math.PI/2;box(elbow,0.4,0.07,0.1,0,-0.48,0.17,gold);}
+      }
+      rig.userData={body,hips,torso,head,legs,arms,phase:0,blend:0,speed:0,heading:0};
+      return rig;
+    }
+    function animateFighterRig(rig,dx,dz,dt,hit,shield) {
+      const r=rig.userData, distance=Math.hypot(dx,dz), moving=distance>0.001;
+      // Exponential smoothing also absorbs the 80 ms position updates of remote players.
+      const speed=Math.min(distance/Math.max(dt,0.001),11);
+      r.speed+=(speed-r.speed)*(1-Math.exp(-dt*12));
+      r.blend+=((r.speed>0.25?1:0)-r.blend)*(1-Math.exp(-dt*14));
+      if(moving&&distance<2){r.heading=Math.atan2(dx,dz);}
+      const turn=Math.atan2(Math.sin(r.heading-rig.rotation.y),Math.cos(r.heading-rig.rotation.y));
+      rig.rotation.y+=turn*(1-Math.exp(-dt*18));
+      r.phase+=r.speed*dt*Math.PI*2/2.6;
+      const blend=r.blend;
+      r.hips.position.y=1.45+Math.cos(r.phase*2)*0.035*blend;
+      r.torso.rotation.x=0.10*blend;
+      r.torso.rotation.y=Math.sin(r.phase)*0.09*blend;
+      r.head.rotation.y=-r.torso.rotation.y*0.65;
+      r.legs.forEach((leg,i)=>{
+        const cycle=((r.phase/(Math.PI*2)+i*0.5)%1+1)%1;
+        // First half is planted; second half lifts the toe and recovers the leg.
+        const z=(cycle<0.5?0.62-2.48*cycle:-0.62+2.48*(cycle-0.5))*blend;
+        const lift=cycle<0.5?0:Math.sin((cycle-0.5)*Math.PI*2)*0.34*blend;
+        const down=r.hips.position.y-0.03-0.12-lift;
+        const d=Math.min(1.499,Math.hypot(down,z)),a=0.78,b=0.72;
+        const thigh=-Math.atan2(z,down)-Math.acos(Math.max(-1,Math.min(1,(a*a+d*d-b*b)/(2*a*d))));
+        const bend=Math.PI-Math.acos(Math.max(-1,Math.min(1,(a*a+b*b-d*d)/(2*a*b))));
+        leg.hip.rotation.x=thigh;leg.knee.rotation.x=bend;leg.foot.rotation.x=-thigh-bend;
+        const arm=r.arms[i];arm.shoulder.rotation.x=Math.sin(r.phase+i*Math.PI)*0.65*blend;
+        arm.elbow.rotation.x=-0.28-0.35*blend;
+        if(hit){arm.shoulder.rotation.x=-1.2+Math.sin(hit*24+i)*0.65;arm.elbow.rotation.x=-0.35;}
+      });
+      r.body.position.y=hit?Math.sin(hit*22)*0.035:0;
+      rig.scale.setScalar(shield>0?1+Math.sin(performance.now()*0.009)*0.025:1);
+    }
+
     function createPlayerMesh(pData) {
       const group = new THREE.Group();
       const charInfo = CHARACTERS[pData.charIndex];
 
-      const baseGeo = new THREE.CylinderGeometry(0.85, 0.95, 0.3, 24);
+      const baseGeo = new THREE.CylinderGeometry(0.85, 0.95, 0.04, 24);
       const baseMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.4 });
       const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-      baseMesh.position.y = 0.15;
+      baseMesh.position.y = 0.02;
       group.add(baseMesh);
 
       const rimGeo = new THREE.TorusGeometry(0.88, 0.06, 16, 24);
       const rimMat = new THREE.MeshBasicMaterial({ color: charInfo.hexColor });
       const rimMesh = new THREE.Mesh(rimGeo, rimMat);
       rimMesh.rotation.x = Math.PI / 2;
-      rimMesh.position.y = 0.3;
+      rimMesh.position.y = 0.05;
       group.add(rimMesh);
 
-      const textureLoader = new THREE.TextureLoader();
-      const tokenTexture = textureLoader.load(charInfo.token, texture => {
-        const aspect = texture.image.width / texture.image.height;
-        sprite.scale.set(3.8 * aspect, 3.8, 1);
-      });
-      const spriteMat = new THREE.SpriteMaterial({ map: tokenTexture, transparent: true, alphaTest: 0.08, depthWrite: false });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.scale.set(2.55, 3.8, 1);
-      sprite.position.y = 2.0;
-      group.add(sprite);
+      const rig=createFighterRig(pData.charIndex);
+      group.add(rig);
 
       const nameCanvas = document.createElement('canvas');
       nameCanvas.width = 256;
@@ -1031,7 +1099,7 @@
       weapon.position.set(0,blade?1.8:1.3,1.1); strike.add(weapon);
       if(!blade){const boot=weapon.clone();boot.scale.set(0.8,0.7,1.6);boot.position.set(0.5,0.6,1.4);strike.add(boot);}
       strike.visible=false;group.add(strike);
-      group.userData={sprite,halo,healthFill,healthBack,attack,pLight,strike};
+      group.userData={rig,halo,healthFill,healthBack,attack,pLight,strike};
       scene.add(group);
       return group;
     }
@@ -1277,21 +1345,17 @@
     function updateFighterVisuals(dt) {
       players.forEach((p,i)=>{
         const m=playerMeshes[i]; if(!m)return;
-        const moved=Math.hypot(p.x-p.lastX,p.z-p.lastZ); p.lastX=p.x;p.lastZ=p.z;
-        p.walkPhase+=Math.min(moved,0.6)*3.2;
+        const dx=p.x-p.lastX,dz=p.z-p.lastZ; p.lastX=p.x;p.lastZ=p.z;
         m.position.set(p.x,0,p.z);
-        const v=m.userData; if(!v?.sprite)return;
-        const walking=moved>0.002, hit=p.hitTimer>0, stride=Math.sin(p.walkPhase);
-        v.sprite.position.y=2+(walking?Math.abs(stride)*0.22:Math.sin(performance.now()*0.002+i)*0.035);
-        v.sprite.material.rotation=hit?Math.sin(p.hitTimer*36)*0.22:walking?stride*0.065:0;
-        v.sprite.material.color.setHex(hit?0xffaaaa:0xffffff);
-        v.sprite.material.opacity=p.shield>0?0.65+Math.sin(performance.now()*0.018)*0.25:1;
+        const v=m.userData; if(!v?.rig)return;
+        const hit=p.hitTimer>0;
+        animateFighterRig(v.rig,dx,dz,dt,p.hitTimer,p.shield);
         v.healthFill.scale.x=p.hp/100; v.healthFill.position.x=-1.06*(1-p.hp/100);
         v.healthFill.material.color.setHex(p.hp>50?0x4ade80:p.hp>25?0xfacc15:0xf87171);
         v.healthBack.quaternion.copy(camera.quaternion);
         v.halo.scale.setScalar(1+Math.sin(performance.now()*0.004+i)*0.1);
         v.halo.material.opacity=hit?0.8:0.32; v.pLight.intensity=hit?3:1.8;
-        v.strike.visible=hit; v.strike.rotation.y=p.walkPhase+p.hitTimer*16;
+        v.strike.visible=false; v.strike.rotation.y=p.walkPhase+p.hitTimer*16;
         v.attack.visible=hit; v.attack.material.rotation=Math.sin(p.hitTimer*20)*0.2;
       });
     }
