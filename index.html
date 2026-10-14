@@ -559,7 +559,7 @@
   <div id="screen-character" class="screen hidden">
     <div class="header-box">
       <h1 class="title">ELEGÍ TU GUERRERO</h1>
-      <p class="subtitle">Tocá el personaje con el que querés competir:</p>
+      <p class="subtitle">Elegí tu guerrero. Al cruzarse se golpean: perdés vida, retrocedés y, si llegás a cero, volvés a tu salida.</p>
     </div>
 
     <div class="char-selection-container">
@@ -624,7 +624,7 @@
   </div>
 
   <!-- AUDIO BAR -->
-  <div id="play-help" class="hidden" style="position:absolute;bottom:12px;right:16px;z-index:12;color:#cbd5e1;font-size:14px;pointer-events:none">WASD / Flechas · Shift: turbo · Esc: menú</div>
+  <div id="play-help" class="hidden" style="position:absolute;bottom:12px;right:16px;z-index:12;color:#cbd5e1;font-size:14px;pointer-events:none">WASD / Flechas · Shift: turbo · Golpes automáticos al cruzarse</div>
   <div class="audio-widget">
     <button id="audio-toggle-btn" title="Activar/Silenciar Música" onclick="toggleAudio()">🔇</button>
     <span style="font-size:0.7rem; color:#94a3b8;">Música</span>
@@ -1013,6 +1013,25 @@
       pLight.position.set(0, 1.8, 0);
       group.add(pLight);
 
+      const halo = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.45, 40), new THREE.MeshBasicMaterial({color:charInfo.hexColor, transparent:true, opacity:0.28, side:THREE.DoubleSide, depthWrite:false}));
+      halo.rotation.x = -Math.PI/2; halo.position.y = 0.08; group.add(halo);
+      const healthBack = new THREE.Mesh(new THREE.PlaneGeometry(2.2,0.18),new THREE.MeshBasicMaterial({color:0x172033,depthTest:false}));
+      healthBack.position.y=4.65; healthBack.quaternion.copy(camera.quaternion); group.add(healthBack);
+      const healthFill = new THREE.Mesh(new THREE.PlaneGeometry(2.12,0.12),new THREE.MeshBasicMaterial({color:0x4ade80,depthTest:false}));
+      healthFill.position.z=0.01; healthBack.add(healthFill);
+      const attackCanvas=document.createElement('canvas'); attackCanvas.width=256; attackCanvas.height=128;
+      const ac=attackCanvas.getContext('2d'); ac.font='bold 54px sans-serif'; ac.textAlign='center'; ac.fillStyle='#ffffff';
+      ac.shadowColor=charInfo.color; ac.shadowBlur=18;
+      ac.fillText(['¡PUM!','¡ZAS!','¡PÁ!','¡POW!'][pData.charIndex],128,80);
+      const attack=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(attackCanvas),transparent:true,depthTest:false}));
+      attack.position.y=3.1; attack.scale.set(2.8,1.4,1); attack.visible=false; group.add(attack);
+      const strike=new THREE.Group();
+      const blade=pData.charIndex===1;
+      const weapon=new THREE.Mesh(blade?new THREE.BoxGeometry(0.16,0.16,2.2):new THREE.SphereGeometry(0.32,12,8),new THREE.MeshStandardMaterial({color:blade?0xe2e8f0:charInfo.hexColor,emissive:charInfo.hexColor,emissiveIntensity:0.5,metalness:0.65,roughness:0.25}));
+      weapon.position.set(0,blade?1.8:1.3,1.1); strike.add(weapon);
+      if(!blade){const boot=weapon.clone();boot.scale.set(0.8,0.7,1.6);boot.position.set(0.5,0.6,1.4);strike.add(boot);}
+      strike.visible=false;group.add(strike);
+      group.userData={sprite,halo,healthFill,healthBack,attack,pLight,strike};
       scene.add(group);
       return group;
     }
@@ -1094,6 +1113,7 @@
       }
 
       players.forEach(p => {
+        Object.assign(p,{hp:100,spawnX:p.x,spawnZ:p.z,combatRev:0,hitTimer:0,shield:2,cooldown:0,walkPhase:0,lastX:p.x,lastZ:p.z});
         const m = createPlayerMesh(p);
         m.position.set(p.x, 0, p.z);
         playerMeshes.push(m);
@@ -1154,7 +1174,7 @@
       }
 
       const len = Math.hypot(moveX, moveZ);
-      if (len > 0.05) {
+      if (len > 0.05 && localPlayer.hitTimer <= 0) {
         moveX = moveX / Math.max(1, len);
         moveZ = moveZ / Math.max(1, len);
         const sprintMult = (keys['ShiftLeft'] || keys['ShiftRight'] || localPlayer.isSprinting) ? 1.45 : 1.0;
@@ -1181,7 +1201,7 @@
 
       for (let i = 1; i < players.length; i++) {
         const p = players[i];
-        if (p.isBot) {
+        if (p.isBot && p.hitTimer <= 0) {
           if (!p.path) p.path = findRoute(p.x, p.z);
           const target = p.path[0];
           if (target) {
@@ -1193,6 +1213,9 @@
           if (playerMeshes[i]) playerMeshes[i].position.set(p.x, 0, p.z);
         }
       }
+
+      updateCombat(dt);
+      updateFighterVisuals(dt);
 
       const dxStar = starWorldX - localPlayer.x;
       const dzStar = starWorldZ - localPlayer.z;
@@ -1217,9 +1240,60 @@
         syncBroadcastTimer += dt;
         if (syncBroadcastTimer > 0.08) {
           syncBroadcastTimer = 0;
-          sendNetMessage({ type: 'pos', id: localPlayer.id, x: localPlayer.x, z: localPlayer.z });
+          sendNetMessage({ type: 'pos', id: localPlayer.id, x: localPlayer.x, z: localPlayer.z, combatRev:localPlayer.combatRev });
         }
       }
+    }
+
+    // Only the host resolves contact; revisions reject positions sent before a hit.
+    function updateCombat(dt) {
+      for (const p of players) {
+        p.hitTimer=Math.max(0,p.hitTimer-dt); p.shield=Math.max(0,p.shield-dt); p.cooldown=Math.max(0,p.cooldown-dt);
+      }
+      if (isMultiplayer && !isHost) return;
+      const ordered=[...players].sort((a,b)=>a.id.localeCompare(b.id));
+      for(let i=0;i<ordered.length;i++) for(let j=i+1;j<ordered.length;j++) {
+        const a=ordered[i], b=ordered[j], dx=b.x-a.x, dz=b.z-a.z, distance=Math.hypot(dx,dz);
+        if(distance>2.25 || a.shield>0 || b.shield>0 || a.cooldown>0 || b.cooldown>0) continue;
+        // Do not hit through maze walls.
+        if(checkWallCollision((a.x+b.x)/2,(a.z+b.z)/2,0.15)) continue;
+        const nx=distance>0.001?dx/distance:1, nz=distance>0.001?dz/distance:0;
+        const fighters=[];
+        for(const [p,sign] of [[a,-1],[b,1]]) {
+          p.hp=Math.max(0,p.hp-25); p.combatRev++; p.hitTimer=0.32; p.cooldown=0.8;
+          const respawn=p.hp===0;
+          if(respawn) { p.x=p.spawnX;p.z=p.spawnZ;p.hp=100;p.shield=2; }
+          else for(let k=0;k<12;k++) {
+            const x=p.x+nx*sign*0.14,z=p.z+nz*sign*0.14;
+            if(!checkWallCollision(x,p.z))p.x=x;
+            if(!checkWallCollision(p.x,z))p.z=z;
+          }
+          p.path=null;
+          fighters.push({id:p.id,x:p.x,z:p.z,hp:p.hp,combatRev:p.combatRev,respawn});
+        }
+        if(isMultiplayer)sendNetMessage({type:'combat',fighters});
+      }
+    }
+    function updateFighterVisuals(dt) {
+      players.forEach((p,i)=>{
+        const m=playerMeshes[i]; if(!m)return;
+        const moved=Math.hypot(p.x-p.lastX,p.z-p.lastZ); p.lastX=p.x;p.lastZ=p.z;
+        p.walkPhase+=Math.min(moved,0.6)*3.2;
+        m.position.set(p.x,0,p.z);
+        const v=m.userData; if(!v?.sprite)return;
+        const walking=moved>0.002, hit=p.hitTimer>0, stride=Math.sin(p.walkPhase);
+        v.sprite.position.y=2+(walking?Math.abs(stride)*0.22:Math.sin(performance.now()*0.002+i)*0.035);
+        v.sprite.material.rotation=hit?Math.sin(p.hitTimer*36)*0.22:walking?stride*0.065:0;
+        v.sprite.material.color.setHex(hit?0xffaaaa:0xffffff);
+        v.sprite.material.opacity=p.shield>0?0.65+Math.sin(performance.now()*0.018)*0.25:1;
+        v.healthFill.scale.x=p.hp/100; v.healthFill.position.x=-1.06*(1-p.hp/100);
+        v.healthFill.material.color.setHex(p.hp>50?0x4ade80:p.hp>25?0xfacc15:0xf87171);
+        v.healthBack.quaternion.copy(camera.quaternion);
+        v.halo.scale.setScalar(1+Math.sin(performance.now()*0.004+i)*0.1);
+        v.halo.material.opacity=hit?0.8:0.32; v.pLight.intensity=hit?3:1.8;
+        v.strike.visible=hit; v.strike.rotation.y=p.walkPhase+p.hitTimer*16;
+        v.attack.visible=hit; v.attack.material.rotation=Math.sin(p.hitTimer*20)*0.2;
+      });
     }
 
     function triggerVictory(winner) {
@@ -1433,7 +1507,7 @@
           };
           client.connect({useSSL:true,timeout:8,onSuccess:() => {
             if (epoch !== roomEpoch) { client.disconnect(); return; }
-            client.subscribe('fran-battle-v3/' + room,{qos:1,onSuccess:() => {
+            client.subscribe('fran-battle-v4/' + room,{qos:1,onSuccess:() => {
               if (epoch !== roomEpoch) return;
               connected = true; announce(); sendNetMessage({type:'hello'});
               heartbeat = setInterval(() => {
@@ -1452,7 +1526,7 @@
       if (!mqttClient || !mqttClient.isConnected()) return;
       try {
         const msg = new Paho.MQTT.Message(JSON.stringify({...payload,senderId:myClientId,matchId:payload.matchId || matchId}));
-        msg.destinationName = 'fran-battle-v3/' + roomCode;
+        msg.destinationName = 'fran-battle-v4/' + roomCode;
         msg.qos = payload.type === 'pos' ? 0 : 1;
         mqttClient.send(msg);
       } catch(e) { console.warn('No se pudo enviar',e.message); }
@@ -1494,9 +1568,16 @@
       if (data.type === 'start' && data.senderId === hostId && pendingGame) { releaseOnline(); return; }
       if (data.type === 'cancel_start' && data.senderId === hostId && pendingGame) { cancelOnlineStart('La carga se interrumpió. Volvé a iniciar.'); return; }
       if (!matchRunning) return;
-      if (data.type === 'pos') {
+      if (data.type === 'combat' && data.senderId === hostId && Array.isArray(data.fighters)) {
+        for (const state of data.fighters) {
+          const p=players.find(p=>p.id===state.id);
+          if (!p || !Number.isInteger(state.combatRev) || state.combatRev<=p.combatRev || !Number.isFinite(state.x) || !Number.isFinite(state.z) || !Number.isFinite(state.hp) || state.hp<0 || state.hp>100 || checkWallCollision(state.x,state.z)) continue;
+          Object.assign(p,{x:state.x,z:state.z,hp:state.hp,combatRev:state.combatRev,hitTimer:0.32,shield:state.respawn?2:0,cooldown:0.8});
+          p.path=null;
+        }
+      } else if (data.type === 'pos') {
         const remote = players.find(p => p.id === data.senderId);
-        if (!remote || !Number.isFinite(data.x) || !Number.isFinite(data.z) || checkWallCollision(data.x,data.z)) return;
+        if (!remote || data.combatRev !== remote.combatRev || !Number.isFinite(data.x) || !Number.isFinite(data.z) || checkWallCollision(data.x,data.z)) return;
         remote.x = data.x; remote.z = data.z;
         const mesh = playerMeshes[players.indexOf(remote)]; if (mesh) mesh.position.set(remote.x,0,remote.z);
       } else if (data.type === 'victory' && data.senderId === hostId) {
