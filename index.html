@@ -559,7 +559,7 @@
   <div id="screen-character" class="screen hidden">
     <div class="header-box">
       <h1 class="title">ELEGÍ TU GUERRERO</h1>
-      <p class="subtitle">Elegí tu guerrero. Al cruzarse se golpean: perdés vida, retrocedés y, si llegás a cero, volvés a tu salida.</p>
+      <p class="subtitle">Para ganar: derrotá a un rival y después agarrá la estrella. Usá E, Espacio o el botón de poder. Al perder la vida volvés a tu salida.</p>
     </div>
 
     <div class="char-selection-container">
@@ -601,7 +601,7 @@
       <div id="hud-player-avatar" style="width:28px; height:28px; border-radius:50%; background-size:cover;background-position:center 12%; border:2px solid #00f0ff;"></div>
       <div>
         <div id="hud-player-name" style="font-family:'Orbitron'; font-weight:800; font-size:0.8rem; color:#00f0ff;">TÚ</div>
-        <div id="hud-match-time" style="font-size:0.7rem; color:#94a3b8;">00:00</div>
+        <div id="hud-objective" style="font-size:0.65rem;color:#facc15">⚔ Derrotá a 1 rival</div><div id="hud-match-time" style="font-size:0.7rem; color:#94a3b8;">00:00</div>
       </div>
     </div>
 
@@ -612,6 +612,7 @@
     </div>
 
     <button class="btn btn-secondary" onclick="showMainMenu()" style="pointer-events:auto;padding:8px;font-size:12px;flex:0">Menú</button>
+    <button id="power-btn" onclick="requestPower()" style="position:fixed;bottom:90px;right:16px;pointer-events:auto;background:#352b6b;color:white;border:2px solid #bfa3ff;border-radius:14px;padding:16px;font-weight:bold;max-width:230px">⚡ PODER · E</button>
     <canvas id="minimap-canvas" width="70" height="70"></canvas>
   </div>
 
@@ -624,7 +625,7 @@
   </div>
 
   <!-- AUDIO BAR -->
-  <div id="play-help" class="hidden" style="position:absolute;bottom:12px;right:16px;z-index:12;color:#cbd5e1;font-size:14px;pointer-events:none">WASD / Flechas · Shift: turbo · Golpes automáticos al cruzarse</div>
+  <div id="play-help" class="hidden" style="position:absolute;bottom:12px;right:16px;z-index:12;color:#cbd5e1;font-size:14px;pointer-events:none">WASD / Flechas · Shift: turbo · E / Espacio: poder</div>
   <div class="audio-widget">
     <button id="audio-toggle-btn" title="Activar/Silenciar Música" onclick="toggleAudio()">🔇</button>
     <span style="font-size:0.7rem; color:#94a3b8;">Música</span>
@@ -640,7 +641,7 @@
         color: "#00f0ff",
         hexColor: 0x00f0ff,
         speed: 1.15,
-        ability: "Turbo Sprint (+15%)",
+        ability: "Impacto turbo · Embestida",
         card: "./motoker.png",
         token: "./motoker.png"
       },
@@ -651,7 +652,7 @@
         color: "#ff3b30",
         hexColor: 0xff3b30,
         speed: 1.05,
-        ability: "Alcance (+25%)",
+        ability: "Eclipse de acero · Salto y espada",
         card: "./cazador.png",
         token: "./cazador.png"
       },
@@ -662,7 +663,7 @@
         color: "#bf5af2",
         hexColor: 0xbf5af2,
         speed: 1.0,
-        ability: "Velocidad normal",
+        ability: "Pozo lunar · Atracción gravitatoria",
         card: "./the-moon.png",
         token: "./the-moon.png"
       },
@@ -673,7 +674,7 @@
         color: "#70d6ff",
         hexColor: 0x70d6ff,
         speed: 1.1,
-        ability: "Velocidad (+10%)",
+        ability: "Pulso de cristal · Congelación",
         card: "./silver.png",
         token: "./silver.png"
       }
@@ -806,6 +807,7 @@
     /* ==========================================================================
        MAZE
        ========================================================================== */
+    let lastStarCell='';
     function generateMaze(size) {
       const grid = Array.from({ length: size }, () => Array(size).fill(1));
       function carve(x, y) {
@@ -830,7 +832,12 @@
       grid[mid][mid] = 0;
       grid[mid-1][mid] = 0; grid[mid+1][mid] = 0;
       grid[mid][mid-1] = 0; grid[mid][mid+1] = 0;
-      return { grid, star: { x: mid, z: mid } };
+      const reachable=new Set(['1,1']),queue=[[1,1]];
+      for(let i=0;i<queue.length;i++){const [x,z]=queue[i];for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,nz=z+dz,key=nx+','+nz;if(grid[nz]?.[nx]===0&&!reachable.has(key)){reachable.add(key);queue.push([nx,nz]);}}}
+      const choices=[];
+      for(let z=3;z<size-3;z++)for(let x=3;x<size-3;x++)if(reachable.has(x+','+z)&&x+','+z!==lastStarCell)choices.push({x,z});
+      const star=choices[Math.floor(Math.random()*choices.length)]||{x:mid,z:mid};lastStarCell=star.x+','+star.z;
+      return {grid,star};
     }
 
     /* ==========================================================================
@@ -922,7 +929,7 @@
       const starShape = new THREE.Shape();
       const points = 5;
       for (let i = 0; i < points * 2; i++) {
-        const r = (i % 2 === 0) ? 1.2 : 0.55;
+        const r = (i % 2 === 0) ? 0.55 : 0.24;
         const a = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
         const px = Math.cos(a) * r;
         const py = Math.sin(a) * r;
@@ -931,7 +938,7 @@
       }
       starShape.closePath();
 
-      const extrudeSettings = { depth: 0.35, bevelEnabled: true, bevelSegments: 2, bevelSize: 0.1 };
+      const extrudeSettings = { depth: 0.1, bevelEnabled: true, bevelSegments: 2, bevelSize: 0.035 };
       const starGeo = new THREE.ExtrudeGeometry(starShape, extrudeSettings);
       starGeo.center();
 
@@ -945,16 +952,10 @@
       const starCore = new THREE.Mesh(starGeo, starMat);
       starGroup.add(starCore);
 
-      const ringGeo = new THREE.TorusGeometry(1.5, 0.06, 16, 32);
-      const ringMat = new THREE.MeshBasicMaterial({ color: 0xffbe0b });
-      const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.rotation.x = Math.PI / 2;
-      starGroup.add(ring);
-
-      const starLight = new THREE.PointLight(0xffbe0b, 2.0, 16);
+      const starLight = new THREE.PointLight(0xffbe0b, 1.2, 8);
       starGroup.add(starLight);
 
-      starGroup.position.set(worldX, 2.2, worldZ);
+      starGroup.position.set(worldX, 1.5, worldZ);
       scene.add(starGroup);
       starMesh = starGroup;
     }
@@ -1027,7 +1028,7 @@
         const thigh=-Math.atan2(z,down)-Math.acos(Math.max(-1,Math.min(1,(a*a+d*d-b*b)/(2*a*d))));
         const bend=Math.PI-Math.acos(Math.max(-1,Math.min(1,(a*a+b*b-d*d)/(2*a*b))));
         leg.hip.rotation.x=thigh;leg.knee.rotation.x=bend;leg.foot.rotation.x=-thigh-bend;
-        const arm=r.arms[i];arm.shoulder.rotation.x=Math.sin(r.phase+i*Math.PI)*0.65*blend;
+        const arm=r.arms[i];arm.shoulder.rotation.z=0;arm.shoulder.rotation.x=Math.sin(r.phase+i*Math.PI)*0.65*blend;
         arm.elbow.rotation.x=-0.28-0.35*blend;
         if(hit){arm.shoulder.rotation.x=-1.2+Math.sin(hit*24+i)*0.65;arm.elbow.rotation.x=-0.35;}
       });
@@ -1099,7 +1100,15 @@
       weapon.position.set(0,blade?1.8:1.3,1.1); strike.add(weapon);
       if(!blade){const boot=weapon.clone();boot.scale.set(0.8,0.7,1.6);boot.position.set(0.5,0.6,1.4);strike.add(boot);}
       strike.visible=false;group.add(strike);
-      group.userData={rig,halo,healthFill,healthBack,attack,pLight,strike};
+      const powerFX=new THREE.Group();powerFX.position.y=0.15;powerFX.visible=false;
+      const pulse=new THREE.Mesh(new THREE.RingGeometry(0.75,1,48),new THREE.MeshBasicMaterial({color:charInfo.hexColor,transparent:true,opacity:0.6,side:THREE.DoubleSide,depthWrite:false}));pulse.rotation.x=-Math.PI/2;powerFX.add(pulse);
+      for(let k=0;k<8;k++){
+        const geo=pData.charIndex===3?new THREE.ConeGeometry(0.08,0.55,5):new THREE.SphereGeometry(0.06,6,4);
+        const spark=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:charInfo.hexColor,transparent:true,opacity:0.8,depthWrite:false}));
+        spark.position.set(Math.sin(k*Math.PI/4)*0.85,0.12,Math.cos(k*Math.PI/4)*0.85);powerFX.add(spark);
+      }
+      group.add(powerFX);
+      group.userData={powerFX,rig,halo,healthFill,healthBack,attack,pLight,strike};
       scene.add(group);
       return group;
     }
@@ -1181,7 +1190,7 @@
       }
 
       players.forEach(p => {
-        Object.assign(p,{hp:100,spawnX:p.x,spawnZ:p.z,combatRev:0,hitTimer:0,shield:2,cooldown:0,walkPhase:0,lastX:p.x,lastZ:p.z});
+        Object.assign(p,{hp:100,kills:0,powerSeq:0,powerTime:0,powerCooldown:0,powerHit:false,powerAngle:0,stun:0,aiTimer:0,spawnX:p.x,spawnZ:p.z,combatRev:0,hitTimer:0,shield:2,cooldown:0,walkPhase:0,lastX:p.x,lastZ:p.z});
         const m = createPlayerMesh(p);
         m.position.set(p.x, 0, p.z);
         playerMeshes.push(m);
@@ -1202,7 +1211,7 @@
 
       if (starMesh) {
         starMesh.rotation.y += dt * 1.8;
-        starMesh.position.y = 2.2 + Math.sin(now * 0.003) * 0.35;
+        starMesh.position.y = 1.5 + Math.sin(now * 0.003) * 0.15;
       }
 
       if (camera && playerMeshes[0]) {
@@ -1242,7 +1251,7 @@
       }
 
       const len = Math.hypot(moveX, moveZ);
-      if (len > 0.05 && localPlayer.hitTimer <= 0) {
+      if (len > 0.05 && localPlayer.hitTimer <= 0 && localPlayer.stun<=0 && localPlayer.powerTime<=0) {
         moveX = moveX / Math.max(1, len);
         moveZ = moveZ / Math.max(1, len);
         const sprintMult = (keys['ShiftLeft'] || keys['ShiftRight'] || localPlayer.isSprinting) ? 1.45 : 1.0;
@@ -1269,8 +1278,15 @@
 
       for (let i = 1; i < players.length; i++) {
         const p = players[i];
-        if (p.isBot && p.hitTimer <= 0) {
-          if (!p.path) p.path = findRoute(p.x, p.z);
+        if (p.isBot && p.hitTimer <= 0 && p.stun<=0 && p.powerTime<=0) {
+          p.aiTimer-=dt;
+          const rival=players.filter(q=>q!==p).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
+          if(p.powerCooldown<=0&&rival&&Math.hypot(rival.x-p.x,rival.z-p.z)<5&&clearStrikePath(p,rival))startPower(p);
+          if (!p.path||p.aiTimer<=0) {
+            let targetCell=starPos;
+            if(p.kills===0&&rival)targetCell={x:Math.floor((rival.x+half)/CELL_SIZE),z:Math.floor((rival.z+half)/CELL_SIZE)};
+            p.path=findRoute(p.x,p.z,targetCell);if(p.kills===0&&rival)p.path.push({x:rival.x,z:rival.z});p.aiTimer=0.6;
+          }
           const target = p.path[0];
           if (target) {
             const dx = target.x - p.x, dz = target.z - p.z;
@@ -1282,6 +1298,7 @@
         }
       }
 
+      updatePowers(dt);
       updateCombat(dt);
       updateFighterVisuals(dt);
 
@@ -1294,9 +1311,9 @@
 
       players.forEach((p) => {
         if (matchWon || (isMultiplayer && !isHost)) return;
-        const pickupRadius = (p.charIndex === 1) ? 2.5 : 2.0;
+        const pickupRadius = 1.2;
         const d = Math.hypot(starWorldX - p.x, starWorldZ - p.z);
-        if (d < pickupRadius) {
+        if (p.kills>0 && d < pickupRadius) {
           triggerVictory(p);
           if (isMultiplayer) {
             sendNetMessage({ type: 'victory', id: p.id, name: p.name, charIndex: p.charIndex });
@@ -1314,34 +1331,118 @@
     }
 
     // Only the host resolves contact; revisions reject positions sent before a hit.
-    function updateCombat(dt) {
-      for (const p of players) {
-        p.hitTimer=Math.max(0,p.hitTimer-dt); p.shield=Math.max(0,p.shield-dt); p.cooldown=Math.max(0,p.cooldown-dt);
+    const POWERS = [
+      {name:'Impacto turbo',duration:0.65,impact:0.12,cooldown:6,range:3,damage:40},
+      {name:'Eclipse de acero',duration:1.3,impact:0.94,cooldown:9,range:4,damage:55},
+      {name:'Pozo lunar',duration:1.1,impact:0.55,cooldown:8,range:5.5,damage:30},
+      {name:'Pulso de cristal',duration:1,impact:0.35,cooldown:8,range:4.5,damage:25}
+    ];
+    function clearStrikePath(a,b) {
+      const n=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)/0.3);
+      for(let i=1;i<=n;i++) if(checkWallCollision(a.x+(b.x-a.x)*i/n,a.z+(b.z-a.z)*i/n,0.12))return false;
+      return true;
+    }
+    function pushFighter(p,dx,dz,distance) {
+      const n=Math.ceil(Math.abs(distance)/0.12),step=distance/Math.max(1,n);
+      for(let i=0;i<n;i++){
+        if(!checkWallCollision(p.x+dx*step,p.z))p.x+=dx*step;
+        if(!checkWallCollision(p.x,p.z+dz*step))p.z+=dz*step;
       }
-      if (isMultiplayer && !isHost) return;
-      const ordered=[...players].sort((a,b)=>a.id.localeCompare(b.id));
-      for(let i=0;i<ordered.length;i++) for(let j=i+1;j<ordered.length;j++) {
-        const a=ordered[i], b=ordered[j], dx=b.x-a.x, dz=b.z-a.z, distance=Math.hypot(dx,dz);
-        if(distance>2.25 || a.shield>0 || b.shield>0 || a.cooldown>0 || b.cooldown>0) continue;
-        // Do not hit through maze walls.
-        if(checkWallCollision((a.x+b.x)/2,(a.z+b.z)/2,0.15)) continue;
-        const nx=distance>0.001?dx/distance:1, nz=distance>0.001?dz/distance:0;
-        const fighters=[];
-        for(const [p,sign] of [[a,-1],[b,1]]) {
-          p.hp=Math.max(0,p.hp-25); p.combatRev++; p.hitTimer=0.32; p.cooldown=0.8;
-          const respawn=p.hp===0;
-          if(respawn) { p.x=p.spawnX;p.z=p.spawnZ;p.hp=100;p.shield=2; }
-          else for(let k=0;k<12;k++) {
-            const x=p.x+nx*sign*0.14,z=p.z+nz*sign*0.14;
-            if(!checkWallCollision(x,p.z))p.x=x;
-            if(!checkWallCollision(p.x,z))p.z=z;
+      p.path=null;
+    }
+    function fighterState(p) {
+      return {id:p.id,x:p.x,z:p.z,hp:p.hp,kills:p.kills,combatRev:p.combatRev,hitTimer:p.hitTimer,shield:p.shield,stun:p.stun,cooldown:p.cooldown,powerTime:p.powerTime};
+    }
+    function publishFighters() {
+      if(isMultiplayer)sendNetMessage({type:'combat',fighters:players.map(fighterState)});
+    }
+    function damageFighter(target,attacker,damage,push=1.68,freeze=0,origin=attacker) {
+      if(target.shield>0)return false;
+      const dx=target.x-origin.x,dz=target.z-origin.z,d=Math.hypot(dx,dz)||1;
+      target.hp=Math.max(0,target.hp-damage); target.combatRev++;target.hitTimer=0.32;target.cooldown=0.8;
+      if(target.hp===0){
+        target.x=target.spawnX;target.z=target.spawnZ;target.hp=100;target.shield=2;target.stun=0;target.powerTime=0;
+        attacker.kills++;attacker.combatRev++;
+      }else{pushFighter(target,dx/d,dz/d,push);target.stun=Math.max(target.stun,freeze);}
+      target.path=null;attacker.path=null;
+      return true;
+    }
+    function requestPower() {
+      if(!matchRunning||matchWon||localPlayer.powerCooldown>0||localPlayer.stun>0)return;
+      if(isMultiplayer&&!isHost)sendNetMessage({type:'power_request'});
+      else startPower(localPlayer);
+    }
+    function startPower(p) {
+      if(!p||p.powerCooldown>0||p.stun>0||p.powerTime>0)return;
+      const spec=POWERS[p.charIndex];p.powerSeq++;p.powerTime=spec.duration;p.powerCooldown=spec.cooldown;p.powerHit=false;
+      const nearby=players.filter(q=>q!==p).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
+      p.powerAngle=nearby&&Math.hypot(nearby.x-p.x,nearby.z-p.z)<7?Math.atan2(nearby.x-p.x,nearby.z-p.z):(p.angle||0);
+      if(p.charIndex===1){p.shield=Math.max(p.shield,0.95);p.combatRev++;publishFighters();}
+      if(p.charIndex===0){pushFighter(p,Math.sin(p.powerAngle),Math.cos(p.powerAngle),3);p.combatRev++;publishFighters();}
+      if(isMultiplayer)sendNetMessage({type:'power_start',id:p.id,seq:p.powerSeq,angle:p.powerAngle});
+    }
+    function updatePowers(dt) {
+      const authority=!isMultiplayer||isHost;
+      for(const p of players){
+        p.powerCooldown=Math.max(0,p.powerCooldown-dt);p.stun=Math.max(0,p.stun-dt);
+        if(p.powerTime<=0)continue;
+        const spec=POWERS[p.charIndex];p.powerTime=Math.max(0,p.powerTime-dt);
+        if(authority&&!p.powerHit&&spec.duration-p.powerTime>=spec.impact){
+          p.powerHit=true;
+          for(const q of players){
+            if(q===p||Math.hypot(q.x-p.x,q.z-p.z)>spec.range||!clearStrikePath(p,q))continue;
+            damageFighter(q,p,spec.damage,p.charIndex===2?-1.8:p.charIndex===1?2.5:1.8,p.charIndex===3?1.4:0);
           }
-          p.path=null;
-          fighters.push({id:p.id,x:p.x,z:p.z,hp:p.hp,combatRev:p.combatRev,respawn});
+          if(p.charIndex===3){p.shield=Math.max(p.shield,1);p.combatRev++;}
+          publishFighters();
         }
-        if(isMultiplayer)sendNetMessage({type:'combat',fighters});
+      }
+      const btn=document.getElementById('power-btn');
+      btn.innerText=localPlayer.powerCooldown>0?'PODER · '+Math.ceil(localPlayer.powerCooldown)+'s':'⚡ '+POWERS[localPlayer.charIndex].name+' · E';
+      btn.disabled=localPlayer.powerCooldown>0||localPlayer.stun>0;
+      document.getElementById('hud-objective').innerText=localPlayer.kills>0?'✓ Rival derrotado · Buscá ⭐':'⚔ Derrotá a 1 rival';
+    }
+    function updateCombat(dt) {
+      for(const p of players){p.hitTimer=Math.max(0,p.hitTimer-dt);p.shield=Math.max(0,p.shield-dt);p.cooldown=Math.max(0,p.cooldown-dt);}
+      if(isMultiplayer&&!isHost)return;
+      const ordered=[...players].sort((a,b)=>a.id.localeCompare(b.id));
+      for(let i=0;i<ordered.length;i++)for(let j=i+1;j<ordered.length;j++){
+        const a=ordered[i],b=ordered[j];
+        if(Math.hypot(b.x-a.x,b.z-a.z)>2.25||a.shield>0||b.shield>0||a.cooldown>0||b.cooldown>0||a.stun>0||b.stun>0||!clearStrikePath(a,b))continue;
+        const origin={x:b.x,z:b.z};damageFighter(b,a,25);damageFighter(a,b,25,1.68,0,origin);publishFighters();
       }
     }
+
+    function animatePower(p,v) {
+      const rig=v.rig,r=rig.userData,spec=POWERS[p.charIndex];
+      const active=p.powerTime>0,t=active?Math.min(1,(spec.duration-p.powerTime)/spec.duration):0;
+      r.body.rotation.set(0,0,0);v.powerFX.visible=active;
+      v.powerFX.rotation.y=performance.now()*0.004;
+      v.powerFX.scale.setScalar(0.4+Math.sin(t*Math.PI)*spec.range);
+      v.powerFX.children.forEach(o=>{o.material.opacity=active?0.65*Math.sin(t*Math.PI):0;});
+      if(p.stun>0){r.torso.rotation.z=Math.sin(performance.now()*0.035)*0.035;v.halo.material.color.setHex(0xd5f6ff);}
+      else {r.torso.rotation.z=0;v.halo.material.color.setHex(CHARACTERS[p.charIndex].hexColor);}
+      if(!active)return;
+      rig.rotation.y=p.powerAngle;
+      if(p.charIndex===1){
+        const airborne=Math.min(1,t/0.75);
+        r.body.position.y=Math.sin(airborne*Math.PI)*5.5;
+        // Full aerial somersault, then a two-handed downward sword strike.
+        r.body.rotation.x=-Math.PI*2*Math.min(1,t/0.65);
+        r.legs.forEach(l=>{l.hip.rotation.x=-0.75*Math.sin(airborne*Math.PI);l.knee.rotation.x=1.2*Math.sin(airborne*Math.PI);});
+        r.arms.forEach(a=>{a.shoulder.rotation.x=t<0.65?-2.7:-2.7+Math.min(1,(t-0.65)/0.15)*3;a.elbow.rotation.x=-0.15;});
+      }else if(p.charIndex===0){
+        r.body.rotation.x=0.4*Math.sin(t*Math.PI);r.arms[1].shoulder.rotation.x=-Math.PI/2;r.arms[1].elbow.rotation.x=0;
+        r.legs[0].hip.rotation.x=-0.7;r.legs[1].hip.rotation.x=0.6;
+      }else if(p.charIndex===2){
+        r.body.position.y=Math.sin(t*Math.PI)*0.9;r.body.rotation.y=Math.sin(t*Math.PI)*0.35;
+        r.arms.forEach((a,i)=>{a.shoulder.rotation.x=-1.2;a.shoulder.rotation.z=(i?1:-1)*Math.sin(t*Math.PI)*0.65;});
+      }else{
+        r.body.position.y=-Math.sin(t*Math.PI)*0.15;
+        r.arms.forEach(a=>{a.shoulder.rotation.x=-Math.PI/2;a.elbow.rotation.x=-0.25*Math.sin(t*Math.PI);});
+      }
+    }
+
     function updateFighterVisuals(dt) {
       players.forEach((p,i)=>{
         const m=playerMeshes[i]; if(!m)return;
@@ -1356,6 +1457,7 @@
         v.halo.scale.setScalar(1+Math.sin(performance.now()*0.004+i)*0.1);
         v.halo.material.opacity=hit?0.8:0.32; v.pLight.intensity=hit?3:1.8;
         v.strike.visible=false; v.strike.rotation.y=p.walkPhase+p.hitTimer*16;
+        animatePower(p,v);
         v.attack.visible=hit; v.attack.material.rotation=Math.sin(p.hitTimer*20)*0.2;
       });
     }
@@ -1571,7 +1673,7 @@
           };
           client.connect({useSSL:true,timeout:8,onSuccess:() => {
             if (epoch !== roomEpoch) { client.disconnect(); return; }
-            client.subscribe('fran-battle-v4/' + room,{qos:1,onSuccess:() => {
+            client.subscribe('fran-battle-v5/' + room,{qos:1,onSuccess:() => {
               if (epoch !== roomEpoch) return;
               connected = true; announce(); sendNetMessage({type:'hello'});
               heartbeat = setInterval(() => {
@@ -1590,7 +1692,7 @@
       if (!mqttClient || !mqttClient.isConnected()) return;
       try {
         const msg = new Paho.MQTT.Message(JSON.stringify({...payload,senderId:myClientId,matchId:payload.matchId || matchId}));
-        msg.destinationName = 'fran-battle-v4/' + roomCode;
+        msg.destinationName = 'fran-battle-v5/' + roomCode;
         msg.qos = payload.type === 'pos' ? 0 : 1;
         mqttClient.send(msg);
       } catch(e) { console.warn('No se pudo enviar',e.message); }
@@ -1632,11 +1734,17 @@
       if (data.type === 'start' && data.senderId === hostId && pendingGame) { releaseOnline(); return; }
       if (data.type === 'cancel_start' && data.senderId === hostId && pendingGame) { cancelOnlineStart('La carga se interrumpió. Volvé a iniciar.'); return; }
       if (!matchRunning) return;
+      if(data.type==='power_request'&&isHost){startPower(players.find(p=>p.id===data.senderId));return;}
+      if(data.type==='power_start'&&data.senderId===hostId){
+        const p=players.find(p=>p.id===data.id);
+        if(p&&Number.isInteger(data.seq)&&data.seq>p.powerSeq&&Number.isFinite(data.angle))Object.assign(p,{powerSeq:data.seq,powerTime:POWERS[p.charIndex].duration,powerCooldown:POWERS[p.charIndex].cooldown,powerAngle:data.angle,powerHit:false});
+        return;
+      }
       if (data.type === 'combat' && data.senderId === hostId && Array.isArray(data.fighters)) {
         for (const state of data.fighters) {
           const p=players.find(p=>p.id===state.id);
-          if (!p || !Number.isInteger(state.combatRev) || state.combatRev<=p.combatRev || !Number.isFinite(state.x) || !Number.isFinite(state.z) || !Number.isFinite(state.hp) || state.hp<0 || state.hp>100 || checkWallCollision(state.x,state.z)) continue;
-          Object.assign(p,{x:state.x,z:state.z,hp:state.hp,combatRev:state.combatRev,hitTimer:0.32,shield:state.respawn?2:0,cooldown:0.8});
+          if (!p || !Number.isInteger(state.combatRev) || state.combatRev<=p.combatRev || !Number.isFinite(state.x) || !Number.isFinite(state.z) || !Number.isFinite(state.hp) || state.hp<0 || state.hp>100 || !Number.isInteger(state.kills) || state.kills<0 || ![state.hitTimer,state.shield,state.stun,state.cooldown,state.powerTime].every(n=>Number.isFinite(n)&&n>=0&&n<=10) || checkWallCollision(state.x,state.z)) continue;
+          Object.assign(p,{x:state.x,z:state.z,hp:state.hp,kills:state.kills,combatRev:state.combatRev,hitTimer:state.hitTimer,shield:state.shield,stun:state.stun,cooldown:state.cooldown,powerTime:state.powerTime});
           p.path=null;
         }
       } else if (data.type === 'pos') {
@@ -1721,18 +1829,18 @@
       const data = {type:'init_game',matchId:myClientId+'_'+Date.now(),grid:maze.grid,star:maze.star,roster:roster()};
       sendNetMessage(data); prepareOnline(data);
     }
-    function findRoute(x,z) {
+    function findRoute(x,z,target=starPos) {
       const half = MAZE_SIZE*CELL_SIZE/2;
       const sx = Math.floor((x+half)/CELL_SIZE), sz = Math.floor((z+half)/CELL_SIZE);
       const queue = [[sx,sz]], prev = new Map([[sx+','+sz,null]]);
       for (let i=0;i<queue.length;i++) {
-        const [cx,cz] = queue[i]; if (cx===starPos.x && cz===starPos.z) break;
+        const [cx,cz] = queue[i]; if (cx===target.x && cz===target.z) break;
         for (const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
           const nx=cx+dx,nz=cz+dz,key=nx+','+nz;
           if (mazeGrid[nz]?.[nx]===0 && !prev.has(key)) {prev.set(key,[cx,cz]);queue.push([nx,nz]);}
         }
       }
-      let pos=[starPos.x,starPos.z]; const route=[];
+      let pos=[target.x,target.z]; const route=[];
       if (!prev.has(pos.join(','))) return route;
       while (pos) {route.push({x:pos[0]*CELL_SIZE-half+CELL_SIZE/2,z:pos[1]*CELL_SIZE-half+CELL_SIZE/2});pos=prev.get(pos.join(','));}
       return route.reverse().slice(1);
@@ -1750,6 +1858,7 @@
       if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
       if (e.code === 'Escape') { showMainMenu(); return; }
       if (matchRunning && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+      if(!e.repeat&&(e.code==='KeyE'||e.code==='Space'))requestPower();
       keys[e.code] = true;
       if (e.code === 'KeyM') toggleAudio();
       if (e.code === 'KeyR' && matchWon) restartMatch();
