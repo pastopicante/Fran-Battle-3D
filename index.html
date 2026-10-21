@@ -475,16 +475,18 @@
   <div id="screen-menu" class="screen">
     <div class="header-box">
       <h1 class="title">FRAN BATTLE 3D</h1>
-      <p class="subtitle">CARRERA POR LA GRAN ESTRELLA · VERSIÓN 4 JUGADORES</p>
+      <p class="subtitle">DUELOS 1 VS 1 · CARRERAS HASTA 4 JUGADORES</p>
     </div>
 
     <div class="modal-card">
       <h2 style="font-family:'Orbitron'; font-size:1.15rem; margin-bottom: 8px; color: #38bdf8;">MODO DE JUEGO</h2>
       <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 14px;">
-        Jugá en solitario contra 3 Bots o conectate online con tus amigos desde cualquier teléfono o compu.
+        Enfrentate cara a cara en la arena o competí por la estrella. Jugá con bots o con amigos desde otro teléfono o compu.
       </p>
 
       <div style="display:flex; flex-direction:column; gap:10px;">
+        <button class="btn btn-accent" onclick="showMultiplayerMenu('duel')">⚔️ DUELO 1 VS 1 ONLINE</button>
+        <button class="btn btn-main" onclick="startSoloMode('duel')">🥊 PRACTICAR DUELO (VS BOT)</button>
         <button class="btn btn-main" onclick="startSoloMode()">
           🎮 JUGAR SOLITARIO (VS 3 BOTS)
         </button>
@@ -508,6 +510,7 @@
 
     <div class="modal-card">
       <!-- VISTA 1: INGRESAR O CREAR -->
+      <div id="mode-lobby" style="text-align:center;color:#c4b5fd;margin-bottom:12px">CARRERA · hasta 4 jugadores</div>
       <div id="mp-choice-view">
         <div style="color:#94a3b8; font-size:0.85rem; margin-bottom:6px;">NOMBRE DE LA SALA:</div>
         <input type="text" id="room-name-input" class="input-code" placeholder="EJ: FRANCHU" value="FRANCHU" maxlength="15">
@@ -539,7 +542,7 @@
         </button>
 
         <h3 style="font-family:'Orbitron'; font-size:0.85rem; margin: 6px 0; color:#38bdf8;">
-          JUGADORES EN LA SALA (<span id="player-count">1</span>/4)
+          JUGADORES EN LA SALA (<span id="player-count">1</span>/<span id="room-capacity">4</span>)
         </h3>
         <div id="lobby-player-list" style="margin-bottom: 10px;"></div>
 
@@ -559,7 +562,7 @@
   <div id="screen-character" class="screen hidden">
     <div class="header-box">
       <h1 class="title">ELEGÍ TU GUERRERO</h1>
-      <p class="subtitle">Para ganar: derrotá a un rival y después agarrá la estrella. Usá E, Espacio o el botón de poder. Al perder la vida volvés a tu salida.</p>
+      <p id="character-instructions" class="subtitle">Para ganar: derrotá a un rival y después agarrá la estrella. Usá E, Espacio o el botón de poder. Al perder la vida volvés a tu salida.</p>
     </div>
 
     <div class="char-selection-container">
@@ -597,6 +600,11 @@
 
   <!-- HUD -->
   <div id="hud" class="hidden">
+    <div id="duel-score" style="display:none;position:fixed;top:84px;left:50%;transform:translateX(-50%);width:min(620px,calc(100% - 32px));gap:12px;font-size:12px;font-weight:bold">
+      <div id="duel-you" style="flex:1;border:1px solid #38bdf8;border-radius:8px;padding:10px;text-align:center"></div>
+      <span style="align-self:center;color:#fff">VS</span>
+      <div id="duel-them" style="flex:1;border:1px solid #fb7185;border-radius:8px;padding:10px;text-align:center"></div>
+    </div>
     <div class="hud-box">
       <div id="hud-player-avatar" style="width:28px; height:28px; border-radius:50%; background-size:cover;background-position:center 12%; border:2px solid #00f0ff;"></div>
       <div>
@@ -605,7 +613,7 @@
       </div>
     </div>
 
-    <div class="hud-box star-radar">
+    <div id="star-radar" class="hud-box star-radar">
       <span>⭐ ESTRELLA:</span>
       <span id="radar-arrow">▲</span>
       <span id="star-distance">24m</span>
@@ -682,6 +690,7 @@
 
     let selectedCharacterIndex = 0;
     let isMultiplayer = false;
+    let gameMode='race';
     let roomCode = "FRANCHU";
     let myClientId = "p_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,10);
     let isHost = false;
@@ -1136,7 +1145,7 @@
       playerMeshes = [];
 
       const half = (MAZE_SIZE * CELL_SIZE) / 2;
-      const spawnCoords = [
+      const spawnCoords = gameMode==='duel'?[{x:9,z:10},{x:11,z:10}]:[
         { x: 1, z: 1 },
         { x: MAZE_SIZE - 2, z: 1 },
         { x: 1, z: MAZE_SIZE - 2 },
@@ -1155,7 +1164,7 @@
 
       if (!isMultiplayer) {
         const availableIndices = [0, 1, 2, 3].filter(i => i !== selectedCharacterIndex);
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < (gameMode==='duel'?1:3); i++) {
           const cIdx = availableIndices[i];
           const spawn = spawnCoords[i + 1];
           const bot = {
@@ -1215,10 +1224,12 @@
       }
 
       if (camera && playerMeshes[0]) {
-        const targetX = localPlayer.x;
-        const targetZ = localPlayer.z;
+        const opponent=gameMode==='duel'?players.find(p=>p!==localPlayer):null;
+        const targetX = opponent?(localPlayer.x+opponent.x)/2:localPlayer.x;
+        const targetZ = opponent?(localPlayer.z+opponent.z)/2:localPlayer.z;
+        const cameraHeight=opponent?Math.max(22,Math.hypot(localPlayer.x-opponent.x,localPlayer.z-opponent.z)*1.2+14)/Math.min(1,camera.aspect||1):22;
         camera.position.x += (targetX - camera.position.x) * 0.1;
-        camera.position.y += (22.0 - camera.position.y) * 0.1;
+        camera.position.y += (cameraHeight - camera.position.y) * 0.1;
         camera.position.z += (targetZ + 9.0 - camera.position.z) * 0.1;
         camera.lookAt(targetX, 1.5, targetZ);
       }
@@ -1284,8 +1295,8 @@
           if(p.powerCooldown<=0&&rival&&Math.hypot(rival.x-p.x,rival.z-p.z)<5&&clearStrikePath(p,rival))startPower(p);
           if (!p.path||p.aiTimer<=0) {
             let targetCell=starPos;
-            if(p.kills===0&&rival)targetCell={x:Math.floor((rival.x+half)/CELL_SIZE),z:Math.floor((rival.z+half)/CELL_SIZE)};
-            p.path=findRoute(p.x,p.z,targetCell);if(p.kills===0&&rival)p.path.push({x:rival.x,z:rival.z});p.aiTimer=0.6;
+            if((gameMode==='duel'||p.kills===0)&&rival)targetCell={x:Math.floor((rival.x+half)/CELL_SIZE),z:Math.floor((rival.z+half)/CELL_SIZE)};
+            p.path=findRoute(p.x,p.z,targetCell);if((gameMode==='duel'||p.kills===0)&&rival)p.path.push({x:rival.x,z:rival.z});p.aiTimer=0.6;
           }
           const target = p.path[0];
           if (target) {
@@ -1310,7 +1321,7 @@
       document.getElementById('radar-arrow').style.transform = `rotate(${deg}deg)`;
 
       players.forEach((p) => {
-        if (matchWon || (isMultiplayer && !isHost)) return;
+        if (gameMode==='duel'||matchWon || (isMultiplayer && !isHost)) return;
         const pickupRadius = 1.2;
         const d = Math.hypot(starWorldX - p.x, starWorldZ - p.z);
         if (p.kills>0 && d < pickupRadius) {
@@ -1357,10 +1368,15 @@
       if(isMultiplayer)sendNetMessage({type:'combat',fighters:players.map(fighterState)});
     }
     function damageFighter(target,attacker,damage,push=1.68,freeze=0,origin=attacker) {
-      if(target.shield>0)return false;
+      if(matchWon||target.shield>0)return false;
       const dx=target.x-origin.x,dz=target.z-origin.z,d=Math.hypot(dx,dz)||1;
       target.hp=Math.max(0,target.hp-damage); target.combatRev++;target.hitTimer=0.32;target.cooldown=0.8;
       if(target.hp===0){
+        if(gameMode==='duel'){
+          attacker.kills++;attacker.combatRev++;publishFighters();triggerVictory(attacker);
+          if(isMultiplayer)sendNetMessage({type:'victory',id:attacker.id});
+          return true;
+        }
         target.x=target.spawnX;target.z=target.spawnZ;target.hp=100;target.shield=2;target.stun=0;target.powerTime=0;
         attacker.kills++;attacker.combatRev++;
       }else{pushFighter(target,dx/d,dz/d,push);target.stun=Math.max(target.stun,freeze);}
@@ -1397,10 +1413,16 @@
           publishFighters();
         }
       }
+      if(gameMode==='duel'){
+        const rival=players.find(p=>p!==localPlayer);
+        for(const [id,p,color] of [['duel-you',localPlayer,'#155e75'],['duel-them',rival,'#881337']])if(p){
+          const el=document.getElementById(id);el.innerText=p.name+' · '+p.hp+'/100';el.style.background=`linear-gradient(90deg,${color} ${p.hp}%,#111827 ${p.hp}%)`;
+        }
+      }
       const btn=document.getElementById('power-btn');
       btn.innerText=localPlayer.powerCooldown>0?'PODER · '+Math.ceil(localPlayer.powerCooldown)+'s':'⚡ '+POWERS[localPlayer.charIndex].name+' · E';
       btn.disabled=localPlayer.powerCooldown>0||localPlayer.stun>0;
-      document.getElementById('hud-objective').innerText=localPlayer.kills>0?'✓ Rival derrotado · Buscá ⭐':'⚔ Derrotá a 1 rival';
+      document.getElementById('hud-objective').innerText=gameMode==='duel'?'⚔ DUELO · '+localPlayer.hp+'/100':localPlayer.kills>0?'✓ Rival derrotado · Buscá ⭐':'⚔ Derrotá a 1 rival';
     }
     function updateCombat(dt) {
       for(const p of players){p.hitTimer=Math.max(0,p.hitTimer-dt);p.shield=Math.max(0,p.shield-dt);p.cooldown=Math.max(0,p.cooldown-dt);}
@@ -1468,13 +1490,13 @@
       playSound('star');
       startFireworks();
       const charInfo = CHARACTERS[winner.charIndex];
-      document.getElementById('victory-title').innerText = (winner.id === localPlayer.id) ? "¡GANASTE LA CARRERA!" : "Ja perdiste, ¡POU!";
-      document.getElementById('victory-subtitle').innerText = `${winner.name} consiguió la Gran Estrella.`;
+      document.getElementById('victory-title').innerText = (winner.id === localPlayer.id) ? (gameMode==='duel'?"¡GANASTE EL DUELO!":"¡GANASTE LA CARRERA!") : "Ja perdiste, ¡POU!";
+      document.getElementById('victory-subtitle').innerText = gameMode==='duel'?`${winner.name} ganó por nocaut.`:`${winner.name} consiguió la Gran Estrella.`;
       document.getElementById('victory-char-img').src = charInfo.card;
       document.getElementById('victory-char-name').innerText = charInfo.name;
       document.getElementById('victory-char-name').style.color = charInfo.color;
       const elapsed = Math.floor((performance.now() - matchStartTime) / 1000);
-      document.getElementById('victory-stats').innerText = `Tiempo de carrera: ${elapsed}s • Personaje: ${charInfo.role}`;
+      document.getElementById('victory-stats').innerText = `Tiempo: ${elapsed}s • Personaje: ${charInfo.role}`;
 
       document.getElementById('hud').classList.add('hidden');
       document.getElementById('touch-controls').classList.add('hidden');
@@ -1558,15 +1580,26 @@
       stopMatch(); leaveRoom(); isMultiplayer = false;
       hideAllScreens(); document.getElementById('screen-menu').classList.remove('hidden');
     }
-    function startSoloMode() {
+    function startSoloMode(mode='race') {
+      gameMode=mode;updateModeUI();
       stopMatch(); leaveRoom(); isMultiplayer = false;
       hideAllScreens(); document.getElementById('screen-character').classList.remove('hidden');
       selectCharacter(selectedCharacterIndex);
     }
-    function showMultiplayerMenu() {
+    function showMultiplayerMenu(mode='race') {
+      gameMode=mode;updateModeUI();
       stopMatch(); leaveRoom(); isMultiplayer = true;
       hideAllScreens(); document.getElementById('screen-character').classList.remove('hidden');
       selectCharacter(selectedCharacterIndex);
+    }
+    function updateModeUI(){
+      document.getElementById('character-instructions').textContent=gameMode==='duel'?'Duelo 1 vs 1: dejá sin vida al rival para ganar. Sin laberinto ni estrella. E, Espacio o botón para usar tu poder.':'Para ganar: derrotá a un rival y después agarrá la estrella. E, Espacio o botón para usar tu poder.';
+      document.getElementById('room-capacity').textContent=gameMode==='duel'?'2':'4';
+      document.getElementById('mode-lobby').textContent=gameMode==='duel'?'DUELO · 2 jugadores':'CARRERA · hasta 4 jugadores';
+    }
+    function createArena(){
+      const grid=Array.from({length:MAZE_SIZE},(_,z)=>Array.from({length:MAZE_SIZE},(_,x)=>x>=7&&x<=13&&z>=7&&z<=13?0:1));
+      return {grid,star:{x:10,z:10}};
     }
     function confirmCharacterSelection() {
       if (isMultiplayer) { showLobby(); return; }
@@ -1589,7 +1622,7 @@
       else document.getElementById('play-help').classList.remove('hidden');
 
       if (!isMultiplayer) {
-        const mazeData = generateMaze(MAZE_SIZE);
+        const mazeData = gameMode==='duel'?createArena():generateMaze(MAZE_SIZE);
         mazeGrid = mazeData.grid;
         starPos = mazeData.star;
         if (isMultiplayer) {
@@ -1599,7 +1632,11 @@
 
       build3DMaze(mazeGrid);
       const half = (MAZE_SIZE * CELL_SIZE) / 2;
-      create3DStar(starPos.x * CELL_SIZE - half + CELL_SIZE / 2, starPos.z * CELL_SIZE - half + CELL_SIZE / 2);
+      if(gameMode==='duel'){if(starMesh){scene.remove(starMesh);starMesh=null;}}
+      else create3DStar(starPos.x * CELL_SIZE - half + CELL_SIZE / 2, starPos.z * CELL_SIZE - half + CELL_SIZE / 2);
+      document.getElementById('star-radar').style.display=gameMode==='duel'?'none':'';
+      document.getElementById('minimap-canvas').style.display=gameMode==='duel'?'none':'';
+      document.getElementById('duel-score').style.display=gameMode==='duel'?'flex':'none';
 
       setupMatchPlayers();
 
@@ -1673,7 +1710,7 @@
           };
           client.connect({useSSL:true,timeout:8,onSuccess:() => {
             if (epoch !== roomEpoch) { client.disconnect(); return; }
-            client.subscribe('fran-battle-v5/' + room,{qos:1,onSuccess:() => {
+            client.subscribe('fran-battle-v6/'+gameMode+'/' + room,{qos:1,onSuccess:() => {
               if (epoch !== roomEpoch) return;
               connected = true; announce(); sendNetMessage({type:'hello'});
               heartbeat = setInterval(() => {
@@ -1692,7 +1729,7 @@
       if (!mqttClient || !mqttClient.isConnected()) return;
       try {
         const msg = new Paho.MQTT.Message(JSON.stringify({...payload,senderId:myClientId,matchId:payload.matchId || matchId}));
-        msg.destinationName = 'fran-battle-v5/' + roomCode;
+        msg.destinationName = 'fran-battle-v6/'+gameMode+'/' + roomCode;
         msg.qos = payload.type === 'pos' ? 0 : 1;
         mqttClient.send(msg);
       } catch(e) { console.warn('No se pudo enviar',e.message); }
@@ -1702,7 +1739,7 @@
       knownPeers.delete(id);
       const index = players.findIndex(p => p.id === id);
       if (index > 0) { scene.remove(playerMeshes[index]); playerMeshes.splice(index,1); players.splice(index,1); }
-      if (wasHost && (matchRunning || pendingGame)) {
+      if ((wasHost||(gameMode==='duel'&&matchRoster.some(p=>p.id===id))) && (matchRunning || pendingGame)) {
         clearInterval(startRetry); pendingGame = null; matchId = null;
         stopMatch(); hideAllScreens(); document.getElementById('screen-multiplayer').classList.remove('hidden');
         ready = true; announce();
@@ -1720,7 +1757,7 @@
       knownPeers.get(data.senderId).seen = Date.now();
       if (data.type === 'leave') { removePeer(data.senderId); updateLobbyUI(); return; }
       if (data.type === 'init_game') {
-        if (data.senderId !== hostId || !Array.isArray(data.roster) || data.roster.length > 4 || !data.roster.some(p => p.id === myClientId)) return;
+        if (data.senderId !== hostId || data.mode!==gameMode || !Array.isArray(data.roster) || data.roster.length > (gameMode==='duel'?2:4) || !data.roster.some(p => p.id === myClientId)) return;
         if (!Array.isArray(data.grid) || data.grid.length !== MAZE_SIZE || data.grid.some(row => !Array.isArray(row) || row.length !== MAZE_SIZE || row.some(v => v!==0 && v!==1))) return;
         if (!data.star || !Number.isInteger(data.star.x) || !Number.isInteger(data.star.z) || data.grid[data.star.z]?.[data.star.x] !== 0) return;
         if (data.roster.some(p => typeof p.id !== 'string' || !Number.isInteger(p.charIndex) || p.charIndex < 0 || p.charIndex > 3)) return;
@@ -1757,6 +1794,7 @@
       }
     }
     function prepareOnline(data) {
+      gameMode=data.mode==='duel'?'duel':'race';
       pendingGame = data; loadedPlayers = new Set(); loadDeadline = Date.now()+25000;
       matchId = data.matchId; mazeGrid = data.grid; starPos = data.star; matchRoster = data.roster;
       knownPeers = new Map();
@@ -1812,21 +1850,21 @@
         row.textContent = (p.id === hostId ? '👑 ' : '') + p.name + (p.id === myClientId ? ' (vos)' : '') + (p.ready ? ' · Listo' : ' · En partida'); list.appendChild(row);
       }
       const btn = document.getElementById('start-online-btn');
-      btn.disabled = !!pendingGame || !connected || !isHost || members.length < 2 || members.length > 4 || members.some(p => !p.ready) || Date.now()-roomSince < 2200;
+      btn.disabled = !!pendingGame || !connected || !isHost || members.length < 2 || members.length > (gameMode==='duel'?2:4) || members.some(p => !p.ready) || Date.now()-roomSince < 2200;
       btn.style.opacity = btn.disabled ? '.5' : '1';
       btn.textContent = isHost ? '🔥 ¡INICIAR PARTIDA!' : 'Esperando al anfitrión…';
       if (pendingGame) { status('Cargando mapa: '+(isHost ? loadedPlayers.size+'/'+matchRoster.length : 'esperando a los demás')+'…'); return; }
-      if (connected) status(members.length > 4 ? 'Sala llena: máximo 4 jugadores.' : members.length < 2 ? 'Conectado. Compartí el enlace con un amigo.' : members.some(p => !p.ready) ? 'Esperando que todos vuelvan a la sala…' : members.length + ' jugadores conectados. '+(isHost ? 'Podés iniciar.' : 'El anfitrión inicia.'), members.length > 4 ? 'error' : 'connected');
+      if (connected) status(members.length > (gameMode==='duel'?2:4) ? (gameMode==='duel'?'El duelo admite exactamente 2 jugadores.':'Sala llena: máximo 4 jugadores.') : members.length < 2 ? 'Conectado. Compartí el enlace con un amigo.' : members.some(p => !p.ready) ? 'Esperando que todos vuelvan a la sala…' : members.length + ' jugadores conectados. '+(isHost ? 'Podés iniciar.' : 'El anfitrión inicia.'), members.length > (gameMode==='duel'?2:4) ? 'error' : 'connected');
     }
     async function copyRoomLink() {
-      const url = new URL(location.href); url.search = ''; url.searchParams.set('room',roomCode);
+      const url = new URL(location.href); url.search = ''; url.searchParams.set('room',roomCode);url.searchParams.set('mode',gameMode);
       try { await navigator.clipboard.writeText(url.href); status('¡Enlace copiado! Pasalo por WhatsApp.','connected'); }
       catch { prompt('Copiá este enlace:',url.href); }
     }
     function launchGameFromLobby() {
       updateLobbyUI(); if (document.getElementById('start-online-btn').disabled) return;
-      const maze = generateMaze(MAZE_SIZE);
-      const data = {type:'init_game',matchId:myClientId+'_'+Date.now(),grid:maze.grid,star:maze.star,roster:roster()};
+      const maze = gameMode==='duel'?createArena():generateMaze(MAZE_SIZE);
+      const data = {type:'init_game',mode:gameMode,matchId:myClientId+'_'+Date.now(),grid:maze.grid,star:maze.star,roster:roster()};
       sendNetMessage(data); prepareOnline(data);
     }
     function findRoute(x,z,target=starPos) {
@@ -1847,7 +1885,7 @@
     }
     window.addEventListener('load', () => {
       const room = new URLSearchParams(location.search).get('room');
-      if (room) { document.getElementById('room-name-input').value = room; showMultiplayerMenu(); }
+      if (room) { document.getElementById('room-name-input').value = room; showMultiplayerMenu(new URLSearchParams(location.search).get('mode')==='duel'?'duel':'race'); }
     });
     window.addEventListener('pagehide',leaveRoom);
 
