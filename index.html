@@ -467,6 +467,19 @@
     .fight-button{border:1px solid #64748b;border-radius:10px;background:#111827e8;color:#f8fafc;font-weight:bold;padding:15px 12px;touch-action:none;user-select:none;cursor:pointer}
     .fight-button:active{background:#6d28d9;transform:translateY(2px)}
     @media(max-width:600px){.fight-button{padding:12px 7px;font-size:10px}#duel-score{top:68px!important}}
+
+    body:has(#hud:not(.hidden)) .audio-widget {bottom:auto;top:14px}
+    html,body {overscroll-behavior:none;-webkit-text-size-adjust:100%}
+    button { -webkit-touch-callout:none; user-select:none; }
+    #hud,#touch-controls {touch-action:none;-webkit-user-select:none;user-select:none}
+    #duel-controls {position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));gap:18px;justify-content:space-between;pointer-events:none;touch-action:none}
+    .fight-movement,.fight-actions {display:grid;grid-template-columns:repeat(2,minmax(64px,1fr));gap:8px;pointer-events:auto}
+    .fight-button {min-height:56px;min-width:64px;font-size:12px;box-shadow:0 3px 0 #020617;border:1px solid #64748b;transition:background .06s,transform .06s}
+    .fight-button.pressed {background:#0e7490;border-color:#67e8f9;transform:translateY(2px);box-shadow:none}
+    .fight-actions .fight-button {background:#39213d;border-color:#a85583}
+    .fight-actions .fight-button.pressed {background:#9d174d}
+    @media(max-height:500px){.fight-button{min-height:46px;padding:9px}.fight-movement,.fight-actions{gap:6px}#play-help{display:none!important}}
+    @media(max-width:500px){.fight-button{padding:10px 6px;font-size:10px}.fight-movement,.fight-actions{gap:6px}#play-help{display:none!important}}
   </style>
 </head>
 <body>
@@ -609,18 +622,18 @@
       <div id="duel-them" style="flex:1;border:1px solid #fb7185;border-radius:8px;padding:10px;text-align:center"></div>
     </div>
     <div id="duel-banner" style="position:fixed;top:28%;left:50%;transform:translateX(-50%);font-family:Orbitron;font-size:32px;color:#fbbf24;text-shadow:0 3px 12px #000;pointer-events:none"></div>
-    <div id="duel-controls" style="display:none;position:fixed;bottom:48px;left:12px;right:12px;gap:8px;justify-content:space-between;pointer-events:auto;flex-wrap:wrap">
-      <div style="display:flex;gap:6px">
-        <button class="fight-button" onpointerdown="duelTouch.move=-1;this.setPointerCapture(event.pointerId)" onpointerup="duelTouch.move=0" onpointercancel="duelTouch.move=0">◀</button>
-        <button class="fight-button" onpointerdown="duelTouch.move=1;this.setPointerCapture(event.pointerId)" onpointerup="duelTouch.move=0" onpointercancel="duelTouch.move=0">▶</button>
-        <button class="fight-button" onclick="requestDuelAction('jump')">SALTAR</button>
-        <button class="fight-button" onpointerdown="duelTouch.crouch=true;this.setPointerCapture(event.pointerId)" onpointerup="duelTouch.crouch=false" onpointercancel="duelTouch.crouch=false">AGACHAR</button>
+    <div id="duel-controls" style="display:none">
+      <div class="fight-movement">
+        <button class="fight-button" data-hold="left" aria-label="Mover a la izquierda">◀</button>
+        <button class="fight-button" data-hold="right" aria-label="Mover a la derecha">▶</button>
+        <button class="fight-button" data-action="jump">SALTAR</button>
+        <button class="fight-button" data-hold="crouch">AGACHAR</button>
       </div>
-      <div style="display:flex;gap:6px">
-        <button class="fight-button" onclick="requestDuelAction('punch')">PUÑO · J</button>
-        <button class="fight-button" onclick="requestDuelAction('kick')">PATADA · K</button>
-        <button class="fight-button" onpointerdown="duelTouch.block=true;this.setPointerCapture(event.pointerId)" onpointerup="duelTouch.block=false" onpointercancel="duelTouch.block=false">BLOQUEO · L</button>
-        <button id="fight-power" class="fight-button" onclick="requestDuelAction('power')">PODER · E</button>
+      <div class="fight-actions">
+        <button class="fight-button" data-action="punch">PUÑO · J</button>
+        <button class="fight-button" data-action="kick">PATADA · K</button>
+        <button class="fight-button" data-hold="block">BLOQUEO · L</button>
+        <button id="fight-power" class="fight-button" data-action="power">PODER · E</button>
       </div>
     </div>
     <div class="hud-box">
@@ -880,10 +893,10 @@
 
       camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = new THREE.WebGLRenderer({ antialias: !isTouchDevice, powerPreference: "high-performance" });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.shadowMap.enabled = true;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.25 : 1.75));
+      renderer.shadowMap.enabled = !isTouchDevice;
       container.appendChild(renderer.domElement);
 
       const hemiLight = new THREE.HemisphereLight(0x9bdfff, 0x64748b, 1.5);
@@ -1269,7 +1282,7 @@
     let syncBroadcastTimer = 0;
     let duel={phase:'intro',round:1,time:60,pause:2,winner:null,seq:0,received:0,netTimer:0};
     const duelTouch={move:0,block:false,crouch:false};
-    const DUEL_MOVES={punch:{duration:.38,impact:.13,range:1.85,damage:10},kick:{duration:.64,impact:.27,range:2.6,damage:16}};
+    const DUEL_MOVES={punch:{duration:.28,impact:.09,range:1.85,damage:10},kick:{duration:.46,impact:.18,range:2.6,damage:16}};
     function initSideDuel(){
       duel={phase:'intro',round:1,time:60,pause:2,winner:null,seq:0,received:0,netTimer:0};
       players.sort((a,b)=>a.id===localPlayer.id?-1:b.id===localPlayer.id?1:0);
@@ -1278,7 +1291,7 @@
       document.getElementById('duel-controls').style.display='flex';
     }
     function resetDuelFighters(){
-      for(const p of players)Object.assign(p,{x:p.fightSide===0?-3.2:3.2,z:0,y:0,vy:0,hp:100,stun:0,hitTimer:0,shield:0,action:'',actionTime:0,actionDuration:0,actionHit:false,powerTime:0,powerCooldown:0,inputMove:0,blocking:false,crouching:false,aiTimer:0,lastX:p.fightSide===0?-3.2:3.2,lastZ:0});
+      for(const p of players)Object.assign(p,{x:p.fightSide===0?-3.2:3.2,z:0,y:0,vy:0,hp:100,stun:0,hitTimer:0,shield:0,action:'',actionTime:0,actionDuration:0,actionHit:false,powerTime:0,powerCooldown:0,inputMove:0,blocking:false,crouching:false,aiTimer:0,queueTime:0,queuedAction:null,lastX:p.fightSide===0?-3.2:3.2,lastZ:0});
     }
     function buildDuelStage(){
       mazeWallMeshes.forEach(m=>scene.remove(m));mazeWallMeshes=[];
@@ -1301,7 +1314,9 @@
       if(isMultiplayer&&!isHost)sendNetMessage({type:'duel_action',action});else beginDuelAction(localPlayer,action);
     }
     function beginDuelAction(p,action){
-      if(!p||duel.phase!=='fight'||p.hp<=0||p.stun>0||p.actionTime>0||p.blocking)return;
+      if(!p||duel.phase!=='fight'||p.hp<=0)return;
+      if(p.stun>0||p.actionTime>0){if(['punch','kick','jump'].includes(action)){p.queuedAction=action;p.queueTime=.18;}return;}
+      if(p.blocking)return;
       if(action==='jump'){if(p.y<=.01&&!p.crouching)p.vy=8.2;return;}
       if(!['punch','kick','power'].includes(action))return;
       if(action==='power'&&(p.powerCooldown>0||p.y>.1))return;
@@ -1318,7 +1333,7 @@
     }
     function receiveSideDuel(data){
       const p=players.find(p=>p.id===data.senderId);
-      if(isHost&&data.type==='duel_input'){applyDuelInput(p,data);return;}
+      if(isHost&&data.type==='duel_input'){applyDuelInput(p,data);if(p)p.inputAge=0;return;}
       if(isHost&&data.type==='duel_action'){beginDuelAction(p,data.action);return;}
       if(data.type!=='duel_state'||data.senderId!==hostId||isHost||!Number.isInteger(data.seq)||data.seq<=duel.received||!Array.isArray(data.fighters)||data.fighters.length!==2)return;
       if(!['intro','fight','roundover','matchover'].includes(data.phase)||![data.round,data.time,data.pause].every(Number.isFinite))return;
@@ -1360,7 +1375,9 @@
       duel.time=Math.max(0,duel.time-dt);
       for(const p of players){
         const q=players.find(q=>q!==p);
+        if(isMultiplayer&&p!==localPlayer&&!p.isBot){p.inputAge=(p.inputAge||0)+dt;if(p.inputAge>.3)applyDuelInput(p,{move:0});}
         p.powerCooldown=Math.max(0,p.powerCooldown-dt);p.stun=Math.max(0,p.stun-dt);p.hitTimer=Math.max(0,p.hitTimer-dt);
+        if(p.queueTime>0){p.queueTime-=dt;if(p.stun<=0&&p.actionTime<=0){const action=p.queuedAction;p.queueTime=0;beginDuelAction(p,action);}}
         if(p.isBot){
           p.aiTimer-=dt;
           if(p.aiTimer<=0){
@@ -1371,7 +1388,7 @@
             else if(Math.random()<.12)beginDuelAction(p,'jump');
           }
         }
-        if(p.stun<=0&&p.actionTime<=0&&!p.blocking&&!p.crouching)p.x=Math.max(-9,Math.min(9,p.x+p.inputMove*4.3*dt));
+        if(p.stun<=0&&p.actionTime<=0&&!p.blocking&&!p.crouching)p.x=Math.max(-9,Math.min(9,p.x+p.inputMove*6.4*dt));
         if(p.y>0||p.vy>0){p.vy-=21*dt;p.y=Math.max(0,p.y+p.vy*dt);if(p.y===0)p.vy=0;}
         if(p.actionTime>0){
           const move=p.action==='power'?POWERS[p.charIndex]:DUEL_MOVES[p.action];
@@ -1405,12 +1422,12 @@
         if(duel.phase!=='fight'&&p.hp<=0){r.body.rotation.z=1.35;r.body.position.y=-.9;}
         v.healthBack.visible=false;v.halo.material.opacity=.18;v.attack.visible=p.hitTimer>0;
       }
-      for(let i=0;i<ordered.length;i++){const p=ordered[i],el=document.getElementById(i?'duel-them':'duel-you');el.innerText=p.name+' · '+p.hp+'  '+('●'.repeat(p.wins))+('○'.repeat(Math.max(0,2-p.wins)));el.style.background=`linear-gradient(90deg,${i?'#9f1239':'#0e7490'} ${p.hp}%,#111827 ${p.hp}%)`;}
-      document.getElementById('hud-match-time').innerText='Al mejor de 3';
-      document.getElementById('duel-round').innerText='ROUND '+duel.round+' · '+Math.ceil(duel.time);
-      document.getElementById('duel-banner').innerText=duel.phase==='intro'?'ROUND '+duel.round:duel.phase==='roundover'?(duel.winner?'¡K.O.!':'EMPATE'):'';
-      document.getElementById('hud-objective').innerText=localPlayer.powerCooldown>0?'Poder: '+Math.ceil(localPlayer.powerCooldown)+'s':'Poder listo · E';
-      document.getElementById('fight-power').innerText=localPlayer.powerCooldown>0?'PODER '+Math.ceil(localPlayer.powerCooldown)+'s':'PODER · E';
+      for(let i=0;i<ordered.length;i++){const p=ordered[i],el=document.getElementById(i?'duel-them':'duel-you');el.textContent=p.name+' · '+p.hp+'  '+('●'.repeat(p.wins))+('○'.repeat(Math.max(0,2-p.wins)));el.style.background=`linear-gradient(90deg,${i?'#9f1239':'#0e7490'} ${p.hp}%,#111827 ${p.hp}%)`;}
+      document.getElementById('hud-match-time').textContent='Al mejor de 3';
+      document.getElementById('duel-round').textContent='ROUND '+duel.round+' · '+Math.ceil(duel.time);
+      document.getElementById('duel-banner').textContent=duel.phase==='intro'?'ROUND '+duel.round:duel.phase==='roundover'?(duel.winner?'¡K.O.!':'EMPATE'):'';
+      document.getElementById('hud-objective').textContent=localPlayer.powerCooldown>0?'Poder: '+Math.ceil(localPlayer.powerCooldown)+'s':'Poder listo · E';
+      document.getElementById('fight-power').textContent=localPlayer.powerCooldown>0?'PODER '+Math.ceil(localPlayer.powerCooldown)+'s':'PODER · E';
     }
     function updateSideDuel(dt){
       if(!isMultiplayer||isHost){applyDuelInput(localPlayer,duelInput());stepSideDuel(dt);}
@@ -1752,7 +1769,7 @@
     function stopMatch() {
       matchRunning = false; matchWon = false;
       for (const key in keys) delete keys[key];
-      endJoystick(); localPlayer.isSprinting = false;duelTouch.move=0;duelTouch.block=false;duelTouch.crouch=false;
+      endJoystick(); localPlayer.isSprinting = false;resetFightControls();
       ['hud','touch-controls','play-help'].forEach(id => document.getElementById(id).classList.add('hidden'));
     }
     function showMainMenu() {
@@ -1797,8 +1814,7 @@
     function startMatch() {
       hideAllScreens();
       document.getElementById('hud').classList.remove('hidden');
-      if (isTouchDevice) document.getElementById('touch-controls').classList.remove('hidden');
-      else document.getElementById('play-help').classList.remove('hidden');
+      syncGameControls();
 
       if (!isMultiplayer) {
         const mazeData = gameMode==='duel'?createArena():generateMaze(MAZE_SIZE);
@@ -1893,7 +1909,7 @@
           };
           client.connect({useSSL:true,timeout:8,onSuccess:() => {
             if (epoch !== roomEpoch) { client.disconnect(); return; }
-            client.subscribe('fran-battle-v7/'+gameMode+'/' + room,{qos:1,onSuccess:() => {
+            client.subscribe('fran-battle-v8/'+gameMode+'/' + room,{qos:1,onSuccess:() => {
               if (epoch !== roomEpoch) return;
               connected = true; announce(); sendNetMessage({type:'hello'});
               heartbeat = setInterval(() => {
@@ -1912,7 +1928,7 @@
       if (!mqttClient || !mqttClient.isConnected()) return;
       try {
         const msg = new Paho.MQTT.Message(JSON.stringify({...payload,senderId:myClientId,matchId:payload.matchId || matchId}));
-        msg.destinationName = 'fran-battle-v7/'+gameMode+'/' + roomCode;
+        msg.destinationName = 'fran-battle-v8/'+gameMode+'/' + roomCode;
         msg.qos = ['pos','duel_input','duel_state'].includes(payload.type)&&!payload.reliable ? 0 : 1;
         mqttClient.send(msg);
       } catch(e) { console.warn('No se pudo enviar',e.message); }
@@ -2016,7 +2032,7 @@
       clearInterval(startRetry); startRetry = null; pendingGame = null;
       hideAllScreens();
       document.getElementById('hud').classList.remove('hidden');
-      document.getElementById(isTouchDevice?'touch-controls':'play-help').classList.remove('hidden');
+      syncGameControls();
       matchStartTime = performance.now(); matchWon = false; matchRunning = true;
     }
     function cancelOnlineStart(message) {
@@ -2094,6 +2110,46 @@
     window.addEventListener('keyup', (e) => {
       keys[e.code] = false;
     });
+
+
+    function syncGameControls(){
+      document.getElementById('touch-controls').classList.toggle('hidden',gameMode==='duel'||!isTouchDevice);
+      document.getElementById('play-help').classList.toggle('hidden',isTouchDevice);
+      document.getElementById('duel-controls').style.display=gameMode==='duel'?'flex':'none';
+    }
+    const fightPointers=new Map();
+    function flushDuelInput(){
+      if(matchRunning&&isMultiplayer&&!isHost)sendNetMessage({type:'duel_input',...duelInput()});
+    }
+    function refreshFightHolds(){
+      const held=[...fightPointers.values()];
+      duelTouch.move=(held.includes('right')?1:0)-(held.includes('left')?1:0);
+      duelTouch.block=held.includes('block');duelTouch.crouch=held.includes('crouch');
+      flushDuelInput();
+    }
+    function resetFightControls(){
+      fightPointers.clear();duelTouch.move=0;duelTouch.block=false;duelTouch.crouch=false;
+      document.querySelectorAll('.fight-button').forEach(b=>b.classList.remove('pressed'));
+      flushDuelInput();
+    }
+    function setupFightControls(){
+      document.querySelectorAll('.fight-button').forEach(button=>{
+        button.addEventListener('pointerdown',e=>{
+          e.preventDefault();button.setPointerCapture(e.pointerId);button.classList.add('pressed');
+          if(button.dataset.hold){fightPointers.set(e.pointerId,button.dataset.hold);refreshFightHolds();}
+          else requestDuelAction(button.dataset.action);
+        });
+        const release=e=>{e.preventDefault();fightPointers.delete(e.pointerId);button.classList.remove('pressed');refreshFightHolds();};
+        ['pointerup','pointercancel','lostpointercapture'].forEach(type=>button.addEventListener(type,release));
+        button.addEventListener('contextmenu',e=>e.preventDefault());
+        button.addEventListener('click',e=>{e.preventDefault();if(e.detail===0&&button.dataset.action)requestDuelAction(button.dataset.action);});
+      });
+    }
+    // Safari can interpret two-finger combat and repeated taps as page gestures.
+    ['gesturestart','gesturechange','gestureend'].forEach(type=>window.addEventListener(type,e=>{if(matchRunning)e.preventDefault();},{passive:false}));
+    window.addEventListener('touchmove',e=>{if(matchRunning)e.preventDefault();},{passive:false});
+    window.addEventListener('blur',resetFightControls);
+    document.addEventListener?.('visibilitychange',()=>{if(document.hidden)resetFightControls();});
 
     const jZone = document.getElementById('joystick-zone');
     const jKnob = document.getElementById('joystick-knob');
@@ -2210,6 +2266,7 @@
     window.addEventListener('blur', () => { for (const key in keys) delete keys[key]; endJoystick(); localPlayer.isSprinting = false; });
     window.addEventListener('touchcancel', () => { endJoystick(); localPlayer.isSprinting = false; });
     window.addEventListener('DOMContentLoaded', () => {
+      setupFightControls();
       populateCharacterGrid();
       init3D();
       animate();
